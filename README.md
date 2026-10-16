@@ -1,6 +1,6 @@
 # RuO · Ruta Óptima
 
-[![tests](https://github.com/USUARIO/RuO/actions/workflows/tests.yml/badge.svg)](https://github.com/USUARIO/RuO/actions/workflows/tests.yml)
+[![tests](https://github.com/LIONKAI/RuO/actions/workflows/tests.yml/badge.svg)](https://github.com/LIONKAI/RuO/actions/workflows/tests.yml)
 ![PHP](https://img.shields.io/badge/PHP-8.3-777BB4?logo=php&logoColor=white)
 ![Laravel](https://img.shields.io/badge/Laravel-13-FF2D20?logo=laravel&logoColor=white)
 ![Tailwind](https://img.shields.io/badge/Tailwind-4-06B6D4?logo=tailwindcss&logoColor=white)
@@ -61,7 +61,7 @@ app/
 Requisitos: PHP 8.3+, Composer, Node 20+, MySQL (por ejemplo con Laragon).
 
 ```bash
-git clone https://github.com/USUARIO/RuO.git
+git clone https://github.com/LIONKAI/RuO.git
 cd ruo
 composer install
 npm install
