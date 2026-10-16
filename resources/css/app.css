@@ -1,0 +1,155 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../views';
+@source '../js';
+
+@theme {
+    --font-sans: 'Barlow', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+        'Noto Color Emoji';
+    --font-display: 'Barlow Condensed', 'Barlow', ui-sans-serif, system-ui, sans-serif;
+
+    --color-ruo-50: #f2f6fa;
+    --color-ruo-100: #e6eef6;
+    --color-ruo-200: #c9d9e9;
+    --color-ruo-300: #9fbad5;
+    --color-ruo-400: #7298bd;
+    --color-ruo-500: #4d7aa6;
+    --color-ruo-600: #2f6496;
+    --color-ruo-700: #284f78;
+    --color-ruo-800: #233f61;
+    --color-ruo-900: #1e3a5f;
+    --color-ruo-950: #142740;
+
+    --color-done: #27ae60;
+    --color-done-50: #eaf7ef;
+    --color-alert: #e67e22;
+    --color-alert-50: #fdf2e8;
+}
+
+@layer base {
+    body {
+        @apply bg-white font-sans text-neutral-900 antialiased;
+    }
+}
+
+@layer components {
+    .btn {
+        @apply inline-flex items-center justify-center gap-2 border px-4 py-2 text-sm font-semibold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ruo-400 disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    .btn-primary {
+        @apply border-ruo-600 bg-ruo-600 text-white hover:border-ruo-700 hover:bg-ruo-700;
+    }
+
+    .btn-secondary {
+        @apply border-ruo-600 bg-white text-ruo-700 hover:bg-ruo-50;
+    }
+
+    .btn-success {
+        @apply border-done bg-done text-white hover:brightness-95;
+    }
+
+    .btn-alert {
+        @apply border-alert bg-alert text-white hover:brightness-95;
+    }
+
+    .btn-ghost {
+        @apply border-transparent bg-transparent text-neutral-500 hover:text-ruo-700;
+    }
+
+    .input {
+        @apply block w-full border border-neutral-300 bg-white px-3 py-2.5 text-base text-neutral-900 placeholder:text-neutral-400 focus:border-ruo-600 focus:ring-2 focus:ring-ruo-200 focus:outline-none;
+    }
+
+    .label {
+        @apply mb-1.5 block text-[11px] font-semibold tracking-[0.07em] text-neutral-600 uppercase;
+    }
+
+    .eyebrow {
+        @apply font-display text-[10px] tracking-[0.1em] text-neutral-500 uppercase;
+    }
+
+    .tag {
+        @apply inline-flex items-center gap-1 border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap;
+    }
+
+    .tag-accent {
+        @apply border-ruo-600 bg-ruo-600 text-white;
+    }
+
+    .tag-done {
+        @apply border-done bg-done-50 text-done;
+    }
+
+    .tag-alert {
+        @apply border-alert bg-alert-50 text-alert;
+    }
+
+    .tag-outline {
+        @apply border-neutral-300 bg-white text-neutral-500;
+    }
+
+    /* Corner brackets used by RuO cards */
+    .corners {
+        @apply relative;
+        --corner-color: var(--color-neutral-400);
+        --corner-size: 8px;
+        background-image:
+            linear-gradient(var(--corner-color), var(--corner-color)), linear-gradient(var(--corner-color), var(--corner-color)),
+            linear-gradient(var(--corner-color), var(--corner-color)), linear-gradient(var(--corner-color), var(--corner-color)),
+            linear-gradient(var(--corner-color), var(--corner-color)), linear-gradient(var(--corner-color), var(--corner-color)),
+            linear-gradient(var(--corner-color), var(--corner-color)), linear-gradient(var(--corner-color), var(--corner-color));
+        background-repeat: no-repeat;
+        background-size:
+            var(--corner-size) 1px, 1px var(--corner-size), var(--corner-size) 1px, 1px var(--corner-size),
+            var(--corner-size) 1px, 1px var(--corner-size), var(--corner-size) 1px, 1px var(--corner-size);
+        background-position:
+            top left, top left, top right, top right,
+            bottom left, bottom left, bottom right, bottom right;
+    }
+
+    .corners-accent {
+        --corner-color: var(--color-ruo-600);
+    }
+
+    .map-box {
+        @apply relative z-0 w-full bg-ruo-50;
+    }
+
+    .stop-marker {
+        @apply flex items-center justify-center border-2 border-white font-display text-xs font-bold text-white shadow;
+        width: 26px;
+        height: 26px;
+    }
+}
+
+@keyframes ruo-pulse {
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.6);
+        opacity: 0.5;
+    }
+}
+
+.live-dot {
+    animation: ruo-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes ruo-flash {
+    from {
+        background-color: var(--color-alert-50);
+    }
+    to {
+        background-color: transparent;
+    }
+}
+
+.flash-updated {
+    animation: ruo-flash 2.5s ease-out;
+}
