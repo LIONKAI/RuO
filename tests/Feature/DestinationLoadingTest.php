@@ -25,7 +25,7 @@ test('the admin loads the four test destinations for vehicle 1', function () {
     foreach ($addresses as [$address, $reference]) {
         $this->actingAs($this->admin)
             ->post(route('admin.destinations.store', $this->vehicle), ['address' => $address, 'reference' => $reference])
-            ->assertRedirect(route('admin.destinations.index', $this->vehicle))
+            ->assertRedirect(route('admin.destinations.index', ['vehicle' => $this->vehicle, 'fecha' => today()->toDateString()]))
             ->assertSessionHasNoErrors();
     }
 

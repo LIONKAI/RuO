@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Database\Factories\VehicleFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -10,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['name', 'plate', 'fuel_liters_per_km', 'driver_id'])]
+#[Fillable(['name', 'plate', 'fuel_liters_per_km', 'driver_id', 'depot_address', 'depot_latitude', 'depot_longitude'])]
 class Vehicle extends Model
 {
     /** @use HasFactory<VehicleFactory> */
@@ -25,6 +26,8 @@ class Vehicle extends Model
     {
         return [
             'fuel_liters_per_km' => 'decimal:3',
+            'depot_latitude' => 'float',
+            'depot_longitude' => 'float',
         ];
     }
 
@@ -59,7 +62,25 @@ class Vehicle extends Model
      */
     public function workdayForToday(): Workday
     {
-        return $this->todayWorkday()->first()
-            ?? $this->workdays()->create(['date' => today()]);
+        return $this->workdayFor(today());
+    }
+
+    /**
+     * Get this vehicle's workday of a given date, creating an empty one when needed.
+     */
+    public function workdayFor(CarbonInterface|string $date): Workday
+    {
+        $date = $date instanceof CarbonInterface ? $date->toDateString() : $date;
+
+        return $this->workdays()->whereDate('date', $date)->first()
+            ?? $this->workdays()->create(['date' => $date]);
+    }
+
+    /**
+     * Whether the vehicle has a base/depot where its routes start.
+     */
+    public function hasDepot(): bool
+    {
+        return $this->depot_latitude !== null && $this->depot_longitude !== null;
     }
 }

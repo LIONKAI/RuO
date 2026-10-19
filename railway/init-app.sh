@@ -3,6 +3,7 @@
 set -e
 
 php artisan migrate --force
+php artisan storage:link || true
 
 if [ "$RUO_SEED_DEMO" = "true" ]; then
     php artisan db:seed --class=RuoSeeder --force

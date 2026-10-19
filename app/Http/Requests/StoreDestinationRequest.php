@@ -25,6 +25,7 @@ class StoreDestinationRequest extends FormRequest
         return [
             'address' => ['required', 'string', 'max:255'],
             'reference' => ['required', 'string', 'max:120'],
+            'phone' => ['nullable', 'string', 'max:30'],
             'latitude' => ['nullable', 'required_with:longitude', 'numeric', 'between:-90,90'],
             'longitude' => ['nullable', 'required_with:latitude', 'numeric', 'between:-180,180'],
         ];
@@ -40,6 +41,7 @@ class StoreDestinationRequest extends FormRequest
         return [
             'address' => 'dirección',
             'reference' => 'referencia',
+            'phone' => 'teléfono',
             'latitude' => 'latitud',
             'longitude' => 'longitud',
         ];

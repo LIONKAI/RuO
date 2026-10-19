@@ -4,7 +4,10 @@
     @php
         $tabs = [
             ['label' => 'Panel', 'url' => route('admin.dashboard'), 'active' => request()->routeIs('admin.dashboard')],
-            ['label' => 'Destinos', 'url' => route('admin.destinations.start'), 'active' => request()->routeIs('admin.destinations.*', 'admin.unplanned.*')],
+            ['label' => 'Pedidos', 'url' => route('admin.pool.index'), 'active' => request()->routeIs('admin.pool.*')],
+            ['label' => 'Jornadas', 'url' => route('admin.destinations.start'), 'active' => request()->routeIs('admin.destinations.*', 'admin.unplanned.*')],
+            ['label' => 'Flota', 'url' => route('admin.vehicles.index'), 'active' => request()->routeIs('admin.vehicles.*')],
+            ['label' => 'Choferes', 'url' => route('admin.drivers.index'), 'active' => request()->routeIs('admin.drivers.*')],
             ['label' => 'Resumen', 'url' => route('admin.summary'), 'active' => request()->routeIs('admin.summary')],
         ];
     @endphp

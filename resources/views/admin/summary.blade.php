@@ -47,6 +47,9 @@
                         </td>
                         <td class="px-4 py-3 text-neutral-600">
                             {{ $row['completed'] }} / {{ $row['total'] }}
+                            @if ($row['failed'])
+                                <span class="text-xs text-alert">({{ $row['failed'] }} fallido{{ $row['failed'] > 1 ? 's' : '' }})</span>
+                            @endif
                             @if ($row['unplanned'])
                                 <span class="text-xs text-alert">({{ $row['unplanned'] }} imprevisto{{ $row['unplanned'] > 1 ? 's' : '' }})</span>
                             @endif

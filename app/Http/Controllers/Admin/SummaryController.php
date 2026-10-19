@@ -27,6 +27,7 @@ class SummaryController extends Controller
                     'status_label' => $workday?->status->label() ?? 'Sin iniciar',
                     'is_completed' => $isCompleted,
                     'completed' => $workday?->completedCount() ?? 0,
+                    'failed' => $workday?->failedCount() ?? 0,
                     'total' => $workday?->destinations->count() ?? 0,
                     'unplanned' => $workday?->destinations->where('is_unplanned', true)->count() ?? 0,
                     'km' => $km,

@@ -34,12 +34,26 @@ class RuoSeeder extends Seeder
 
         Vehicle::query()->updateOrCreate(
             ['plate' => 'ABC-123'],
-            ['name' => 'Vehículo 1', 'fuel_liters_per_km' => 0.08, 'driver_id' => $juan->id],
+            [
+                'name' => 'Vehículo 1',
+                'fuel_liters_per_km' => 0.08,
+                'driver_id' => $juan->id,
+                'depot_address' => 'Plaza 24 de Septiembre, Santa Cruz',
+                'depot_latitude' => -17.7834,
+                'depot_longitude' => -63.1821,
+            ],
         );
 
         Vehicle::query()->updateOrCreate(
             ['plate' => 'XYZ-456'],
-            ['name' => 'Vehículo 2', 'fuel_liters_per_km' => 0.10, 'driver_id' => $pedro->id],
+            [
+                'name' => 'Vehículo 2',
+                'fuel_liters_per_km' => 0.10,
+                'driver_id' => $pedro->id,
+                'depot_address' => 'Av. Santos Dumont 4to Anillo, Santa Cruz',
+                'depot_latitude' => -17.8200,
+                'depot_longitude' => -63.1750,
+            ],
         );
     }
 }

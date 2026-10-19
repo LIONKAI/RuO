@@ -5,6 +5,8 @@
         'activeUrl' => route('driver.active'),
         'summaryUrl' => route('driver.summary'),
         'completeUrl' => route('driver.destinations.complete', ['destination' => '__ID__']),
+        'failUrl' => route('driver.destinations.fail', ['destination' => '__ID__']),
+        'positionUrl' => route('driver.position.store'),
         'center' => [config('services.map.center_latitude'), config('services.map.center_longitude')],
     ];
 @endphp

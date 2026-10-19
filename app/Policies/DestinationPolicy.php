@@ -31,6 +31,14 @@ class DestinationPolicy
     }
 
     /**
+     * The assigned driver can mark the active destination as failed.
+     */
+    public function fail(User $user, Destination $destination): Response
+    {
+        return $this->complete($user, $destination);
+    }
+
+    /**
      * Planned destinations can only be removed by an admin before the route is generated.
      */
     public function delete(User $user, Destination $destination): Response
@@ -38,5 +46,15 @@ class DestinationPolicy
         return $user->isAdmin() && $destination->workday->isDraft()
             ? Response::allow()
             : Response::deny('Ya no se pueden eliminar destinos: la ruta del día ya fue generada.');
+    }
+
+    /**
+     * Only a failed destination can be sent back to the pool by an admin.
+     */
+    public function requeue(User $user, Destination $destination): Response
+    {
+        return $user->isAdmin() && $destination->isFailed()
+            ? Response::allow()
+            : Response::deny('Solo los destinos fallidos pueden volver a la cola.');
     }
 }

@@ -16,13 +16,13 @@ beforeEach(function () {
 
 test('generating the route orders destinations as the optimization service suggests', function () {
     $workday = workdayWithTestDestinations($this->vehicle);
-    // Round trip suggested by the service: Arenales → Cañoto → Murillo → Busch → (back to Arenales).
-    // The longest leg (Busch → Arenales, 3 km) is dropped to open the route.
-    fakeOsrmTrip(tripOrder: [3, 0, 1, 2], legMeters: [1200, 800, 900, 3000]);
+    // Trip anchored at the depot (input 0) suggested by the service:
+    // Depot → Arenales → Cañoto → Murillo → Busch.
+    fakeOsrmTrip(tripOrder: [0, 4, 1, 2, 3], legMeters: [1200, 800, 900, 3000]);
 
     $this->actingAs($this->admin)
         ->post(route('admin.route.store', $this->vehicle))
-        ->assertRedirect(route('admin.destinations.index', $this->vehicle))
+        ->assertRedirect(route('admin.destinations.index', ['vehicle' => $this->vehicle, 'fecha' => today()->toDateString()]))
         ->assertSessionHas('status');
 
     $workday->refresh()->load('destinations');
@@ -32,16 +32,17 @@ test('generating the route orders destinations as the optimization service sugge
         ->and($workday->destinations->pluck('reference')->all())->toBe([
             'Taller Mecánico Sur', 'Ferretería El Constructor', 'Distribuidora Norte', 'Almacén Central',
         ])
-        ->and($workday->destinations->pluck('leg_distance_meters')->all())->toBe([0, 1200, 800, 900])
-        ->and($workday->routeKm())->toBe(2.9);
+        ->and($workday->destinations->pluck('leg_distance_meters')->all())->toBe([1200, 800, 900, 3000])
+        ->and($workday->routeKm())->toBe(5.9);
 
     Http::assertSent(fn (Request $request) => str_contains($request->url(), '/trip/v1/driving/')
-        && $request['roundtrip'] === 'true' && $request['source'] === 'any');
+        && $request['roundtrip'] === 'false' && $request['source'] === 'first'
+        && str_contains(urldecode($request->url()), sprintf('%.6F,%.6F;', $this->vehicle->depot_longitude, $this->vehicle->depot_latitude)));
 });
 
 test('the driver sees the optimized route with map data and ordered list', function () {
     workdayWithTestDestinations($this->vehicle);
-    fakeOsrmTrip(tripOrder: [1, 0, 2, 3], legMeters: [1000, 1000, 1000, 5000]);
+    fakeOsrmTrip(tripOrder: [0, 2, 1, 3, 4], legMeters: [1000, 1000, 1000, 5000]);
     $this->actingAs($this->admin)->post(route('admin.route.store', $this->vehicle));
 
     $this->actingAs($this->driver)

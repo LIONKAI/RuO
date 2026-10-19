@@ -39,11 +39,13 @@ class DashboardController extends Controller
                 'status' => $workday?->status->value ?? 'draft',
                 'status_label' => $workday?->status->label() ?? 'Sin iniciar',
                 'completed' => $workday?->completedCount() ?? 0,
+                'failed' => $workday?->failedCount() ?? 0,
                 'total' => $workday?->destinations->count() ?? 0,
                 'driven_km' => $workday?->drivenKm() ?? 0,
                 'route_km' => $workday?->routeKm() ?? 0,
                 'driven_fuel' => $workday ? $workday->fuelForKm($workday->drivenKm()) : 0,
                 'active' => $this->activeDestination($workday),
+                'map' => $this->fleetMap($vehicle, $workday),
                 'urls' => [
                     'destinations' => route('admin.destinations.index', $vehicle),
                     'unplanned' => route('admin.unplanned.create', $vehicle),
@@ -81,5 +83,43 @@ class DashboardController extends Controller
             'address' => $active->address,
             'is_unplanned' => $active->is_unplanned,
         ] : null;
+    }
+
+    /**
+     * Map payload of a running route: depot, last driver position and stops
+     * with the leg geometry that reaches each one.
+     *
+     * @return array<string, mixed>|null
+     */
+    protected function fleetMap(Vehicle $vehicle, ?Workday $workday): ?array
+    {
+        if ($workday === null || ! $workday->isInProgress()) {
+            return $vehicle->hasDepot() ? ['depot' => $this->depot($vehicle), 'position' => null, 'destinations' => []] : null;
+        }
+
+        return [
+            'depot' => $this->depot($vehicle),
+            'position' => $workday->lastPosition(),
+            'destinations' => $workday->destinations->map(fn ($destination) => [
+                'id' => $destination->id,
+                'position' => $destination->position,
+                'reference' => $destination->reference,
+                'status' => $destination->status->value,
+                'is_unplanned' => $destination->is_unplanned,
+                'latitude' => $destination->latitude,
+                'longitude' => $destination->longitude,
+                'geometry' => $destination->leg_geometry ?? [],
+            ])->all(),
+        ];
+    }
+
+    /**
+     * @return array{latitude: float, longitude: float}|null
+     */
+    protected function depot(Vehicle $vehicle): ?array
+    {
+        return $vehicle->hasDepot()
+            ? ['latitude' => $vehicle->depot_latitude, 'longitude' => $vehicle->depot_longitude]
+            : null;
     }
 }

@@ -3,6 +3,8 @@
 @section('title', 'Panel general')
 @section('page', 'admin-dashboard')
 
+@include('partials.leaflet')
+
 @section('main')
     <div class="mb-7 flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -17,6 +19,8 @@
     </div>
 
     <div class="mb-7 grid grid-cols-2 gap-3 lg:grid-cols-4" data-stats></div>
+
+    <div class="map-box mb-7 hidden h-[380px] border border-neutral-200" data-fleet-map></div>
 
     <div class="mb-4 flex items-center gap-3">
         <span class="eyebrow">Estado de vehículos</span>

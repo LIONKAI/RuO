@@ -21,6 +21,7 @@ class WorkdayResource extends JsonResource
     public function toArray(Request $request): array
     {
         $completed = $this->completedCount();
+        $failed = $this->failedCount();
         $total = $this->destinations->count();
         $drivenKm = $this->drivenKm();
         $routeKm = $this->routeKm();
@@ -35,8 +36,9 @@ class WorkdayResource extends JsonResource
             'signature' => implode('-', [$this->route_version, $completed, $total, $this->status->value]),
             'route_updated_at' => $this->route_updated_at?->toIso8601String(),
             'completed' => $completed,
+            'failed' => $failed,
             'total' => $total,
-            'remaining' => $total - $completed,
+            'remaining' => $total - $completed - $failed,
             'driven_km' => $drivenKm,
             'route_km' => $routeKm,
             'driven_fuel' => $this->fuelForKm($drivenKm),
@@ -44,12 +46,18 @@ class WorkdayResource extends JsonResource
             'total_km' => $this->total_km !== null ? (float) $this->total_km : null,
             'estimated_fuel_liters' => $this->estimated_fuel_liters !== null ? (float) $this->estimated_fuel_liters : null,
             'active_id' => $active?->id,
+            'position' => $this->lastPosition(),
             'vehicle' => [
                 'id' => $this->vehicle->id,
                 'name' => $this->vehicle->name,
                 'plate' => $this->vehicle->plate,
                 'fuel_liters_per_km' => (float) $this->vehicle->fuel_liters_per_km,
                 'driver' => $this->vehicle->driver?->name,
+                'depot' => $this->vehicle->hasDepot() ? [
+                    'address' => $this->vehicle->depot_address,
+                    'latitude' => $this->vehicle->depot_latitude,
+                    'longitude' => $this->vehicle->depot_longitude,
+                ] : null,
             ],
             'destinations' => DestinationResource::collection($this->destinations),
         ];

@@ -19,8 +19,9 @@ class RouteOptimizer
     /**
      * (Re)calculate the optimal order of the pending destinations of a workday.
      *
-     * When the driver already completed destinations, the route restarts from the
-     * last completed one. Otherwise the best starting point is chosen by the service.
+     * The route starts where the driver actually is: the last completed
+     * destination, or the vehicle's depot when the day has not started yet.
+     * Without a depot, the best starting point is chosen by the service.
      *
      * @throws RoutingServiceException
      */
@@ -34,8 +35,9 @@ class RouteOptimizer
 
         $completed = $destinations->filter->isCompleted()->sortBy('position')->values();
         $pending = $destinations->filter->isPending()->values();
+        $anchor = $this->anchor($workday, $completed->last());
 
-        $plan = $pending->isEmpty() ? [] : $this->plan($completed->last(), $pending);
+        $plan = $pending->isEmpty() ? [] : $this->plan($anchor, $pending);
 
         DB::transaction(function () use ($workday, $completed, $plan) {
             $position = $completed->count();
@@ -61,14 +63,41 @@ class RouteOptimizer
     }
 
     /**
+     * Where the route starts: the last stop already visited or the vehicle's depot.
+     *
+     * @return array{latitude: float, longitude: float}|null
+     */
+    protected function anchor(Workday $workday, ?Destination $lastCompleted): ?array
+    {
+        if ($lastCompleted !== null) {
+            return ['latitude' => $lastCompleted->latitude, 'longitude' => $lastCompleted->longitude];
+        }
+
+        if ($workday->vehicle?->hasDepot()) {
+            return ['latitude' => $workday->vehicle->depot_latitude, 'longitude' => $workday->vehicle->depot_longitude];
+        }
+
+        return null;
+    }
+
+    /**
      * Build the ordered list of pending stops with the leg that reaches each one.
      *
+     * @param  array{latitude: float, longitude: float}|null  $anchor
      * @param  Collection<int, Destination>  $pending
      * @return list<array{destination: Destination, distance: int, duration: int, geometry: list<array{0: float, 1: float}>|null, steps: list<array{text: string, distance: int}>}>
      */
-    protected function plan(?Destination $anchor, Collection $pending): array
+    protected function plan(?array $anchor, Collection $pending): array
     {
-        $points = $anchor ? collect([$anchor])->concat($pending)->values() : $pending;
+        $points = $anchor !== null
+            ? collect([['latitude' => $anchor['latitude'], 'longitude' => $anchor['longitude'], 'destination' => null]])
+            : collect();
+
+        $pending->each(fn (Destination $destination) => $points->push([
+            'latitude' => $destination->latitude,
+            'longitude' => $destination->longitude,
+            'destination' => $destination,
+        ]));
 
         if ($points->count() === 1) {
             return [$this->stop($pending->first(), null)];
@@ -89,7 +118,7 @@ class RouteOptimizer
             $stops = [];
 
             foreach (array_slice($order, 1) as $tripPosition => $inputIndex) {
-                $stops[] = $this->stop($points[$inputIndex], $legs[$tripPosition]);
+                $stops[] = $this->stop($points[$inputIndex]['destination'], $legs[$tripPosition]);
             }
 
             return $stops;
@@ -101,7 +130,7 @@ class RouteOptimizer
     /**
      * Turn a round trip into the shortest open path by dropping its longest leg.
      *
-     * @param  Collection<int, Destination>  $points
+     * @param  Collection<int, array{latitude: float, longitude: float, destination: Destination|null}>  $points
      * @param  list<int>  $order
      * @param  list<array<string, mixed>>  $legs
      * @return list<array{destination: Destination, distance: int, duration: int, geometry: list<array{0: float, 1: float}>|null, steps: list<array{text: string, distance: int}>}>
@@ -112,20 +141,20 @@ class RouteOptimizer
         $longestLeg = collect($legs)->sortByDesc('distance')->keys()->first();
         $start = ($longestLeg + 1) % $count;
 
-        $stops = [$this->stop($points[$order[$start]], null)];
+        $stops = [$this->stop($points[$order[$start]]['destination'], null)];
 
         for ($offset = 1; $offset < $count; $offset++) {
             $tripPosition = ($start + $offset) % $count;
             $previousLeg = ($tripPosition - 1 + $count) % $count;
 
-            $stops[] = $this->stop($points[$order[$tripPosition]], $legs[$previousLeg]);
+            $stops[] = $this->stop($points[$order[$tripPosition]]['destination'], $legs[$previousLeg]);
         }
 
         return $stops;
     }
 
     /**
-     * @param  Collection<int, Destination>  $points
+     * @param  Collection<int, array{latitude: float, longitude: float, destination: Destination|null}>  $points
      * @return array{waypoints: list<array<string, mixed>>, trips: list<array<string, mixed>>}
      *
      * @throws RoutingServiceException
@@ -133,7 +162,7 @@ class RouteOptimizer
     protected function requestTrip(Collection $points, bool $startsAtAnchor): array
     {
         $coordinates = $points
-            ->map(fn (Destination $destination) => sprintf('%.6F,%.6F', $destination->longitude, $destination->latitude))
+            ->map(fn (array $point) => sprintf('%.6F,%.6F', $point['longitude'], $point['latitude']))
             ->implode(';');
 
         $profile = config('services.osrm.profile');

@@ -1,6 +1,9 @@
-{{-- Destination form with map picker. Expects $action, $submitLabel and optional $unplanned. --}}
+{{-- Destination form with map picker. Expects $action, $submitLabel and optional $unplanned, $dateField. --}}
 <form method="POST" action="{{ $action }}" class="flex flex-col gap-4" data-destination-form>
     @csrf
+    @if ($dateField ?? null)
+        <input type="hidden" name="fecha" value="{{ $dateField }}">
+    @endif
     <div>
         <label for="address" class="label">Dirección</label>
         <div class="flex gap-2">
@@ -18,6 +21,14 @@
         <input id="reference" name="reference" value="{{ old('reference') }}" required maxlength="120" autocomplete="off"
             placeholder="Ej: Ferretería El Constructor" @class(['input', 'border-alert' => $errors->has('reference')])>
         @error('reference')
+            <p class="mt-1.5 text-sm text-alert">{{ $message }}</p>
+        @enderror
+    </div>
+    <div>
+        <label for="phone" class="label">Teléfono del cliente <span class="font-normal normal-case text-neutral-400">(opcional · para aviso por WhatsApp)</span></label>
+        <input id="phone" name="phone" type="tel" value="{{ old('phone') }}" maxlength="30" autocomplete="off"
+            placeholder="Ej: 70012345" @class(['input', 'border-alert' => $errors->has('phone')])>
+        @error('phone')
             <p class="mt-1.5 text-sm text-alert">{{ $message }}</p>
         @enderror
     </div>

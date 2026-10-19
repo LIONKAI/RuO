@@ -7,32 +7,42 @@
 ![Leaflet](https://img.shields.io/badge/Leaflet-mapas-199900?logo=leaflet&logoColor=white)
 ![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?logo=mysql&logoColor=white)
 
-Sistema web para **planificar y seguir rutas de reparto**. El administrador carga los destinos del día por vehículo, RuO calcula el orden óptimo de visita y el chofer sigue la ruta paso a paso desde el celular.
+Plataforma de **logística de última milla**: el administrador carga los pedidos del día, RuO los reparte entre la flota y calcula el orden óptimo de visita, el chofer sigue la ruta desde el celular y el cliente sigue su entrega en vivo con un link público.
 
-**[Demo en vivo](https://TU-DOMINIO.up.railway.app)** · Hecho en Santa Cruz de la Sierra, Bolivia
-
-![RuO en acción](docs/demo.gif)
+Hecho en Santa Cruz de la Sierra, Bolivia
 
 ## Qué hace
 
 **Administrador**
-- Carga destinos escribiendo la dirección (geocodificación automática) o marcándolos en el mapa.
-- Genera la ruta óptima de cada vehículo con un clic.
-- Agrega destinos imprevistos en plena jornada: la ruta se recalcula al instante desde la última entrega.
-- Ve el avance de la flota y un resumen con kilómetros recorridos y combustible estimado.
+- Gestiona vehículos (con base/depósito) y choferes desde el panel.
+- Pool de pedidos del día: carga uno a uno, por geocodificación o **importación masiva** (una línea por pedido).
+- **Reparte el pool entre toda la flota con un clic** y optimiza la ruta de cada vehículo.
+- Planifica cualquier fecha, no solo hoy.
+- Mapa de flota en vivo con la posición GPS de cada chofer.
+- Agrega destinos imprevistos en plena jornada: la ruta se recalcula desde la última entrega.
+- Reagenda entregas fallidas; comparte links de tracking por **WhatsApp** (`wa.me`).
+- Resumen del día: kilómetros, combustible estimado y % de cumplimiento.
 
 **Chofer**
-- Ve su ruta del día en el mapa y el destino activo.
-- Recibe indicaciones giro a giro en español.
-- Marca cada entrega como completada; la jornada se cierra sola al terminar.
+- Ve su ruta del día en el mapa con indicaciones giro a giro en español.
+- **Comparte su posición GPS** mientras la ruta está activa.
+- Registra **prueba de entrega**: foto, firma y notas.
+- Marca entregas **fallidas con motivo** (cliente ausente, dirección incorrecta, rechazado).
+- La jornada se cierra sola al terminar.
+
+**Cliente final (sin registro)**
+- Recibe un **link público de tracking**: ve en el mapa dónde va su pedido, cuántas paradas faltan y la hora estimada de llegada.
 
 ## Cómo funciona la optimización
 
-El orden de visita es un **problema del viajante (TSP)**. RuO lo resuelve con el servicio `trip` de [OSRM](https://project-osrm.org/) sobre la red vial real de OpenStreetMap:
+Hay dos niveles:
 
-1. Si la jornada ya empezó, la ruta se ancla en el último destino completado y solo se reordenan los pendientes.
-2. Si no, se pide un circuito cerrado y se abre quitando su tramo más largo, para obtener el recorrido abierto más corto.
-3. Se guarda la geometría, distancia, duración e instrucciones de cada tramo; el panel del chofer se actualiza por versión de ruta.
+**Reparto de flota (VRP)** — `FleetOptimizer`: agrupa geográficamente los pedidos del pool (k-means sobre coordenadas) y asigna cada grupo al vehículo cuyo depósito está más cerca del centroide del grupo.
+
+**Orden de visita (TSP)** — `RouteOptimizer` con el servicio `trip` de [OSRM](https://project-osrm.org/) sobre la red vial real de OpenStreetMap:
+
+1. La ruta parte del **depósito del vehículo** (o del último destino completado si la jornada ya empezó).
+2. Se guarda la geometría, distancia, duración e instrucciones de cada tramo; el panel del chofer se actualiza por versión de ruta.
 
 ## Stack
 
@@ -42,18 +52,20 @@ El orden de visita es un **problema del viajante (TSP)**. RuO lo resuelve con el
 | Frontend | Blade, Tailwind CSS 4, Bootstrap 5, Vite |
 | Mapas | Leaflet, OSRM (rutas), Nominatim (geocodificación) |
 | Base de datos | MySQL 8 |
-| Tests | Pest 4 (31 tests) |
+| Tests | Pest 4 (61 tests) |
 | Despliegue | Railway + GitHub Actions |
 
 ```
 app/
 ├── Services/
-│   ├── RouteOptimizer.php       # TSP con OSRM y armado de tramos
-│   ├── WorkdayManager.php       # destinos, imprevistos y cierre de jornada
+│   ├── RouteOptimizer.php       # TSP con OSRM, anclado al depósito
+│   ├── FleetOptimizer.php       # reparto del pool entre la flota
+│   ├── WorkdayManager.php       # destinos, PoD, fallidos y cierre
 │   ├── Geocoder.php             # direcciones → coordenadas (Nominatim)
-│   └── DirectionsTranslator.php # maniobras de OSRM → español
+│   ├── DirectionsTranslator.php # maniobras de OSRM → español
+│   └── WhatsApp.php             # mensajes y links wa.me
 ├── Models/                      # Vehicle → Workday → Destination
-└── Http/Controllers/{Admin,Driver}
+└── Http/Controllers/{Admin,Driver} + TrackingController (público)
 ```
 
 ## Instalación local
@@ -106,11 +118,25 @@ composer run dev
 php artisan test
 ```
 
-## Limitaciones conocidas y próximos pasos
+## Roadmap
 
-- Usa los servidores públicos de OSRM y Nominatim, pensados para demos (con límite de uso).
-- La ruta todavía no parte de una base o almacén del vehículo.
-- Optimiza cada vehículo por separado; repartir destinos entre la flota (VRP) es el siguiente paso.
+**Hecho**
+- Depósito/base por vehículo como ancla de ruta
+- Pool de pedidos + reparto entre la flota (VRP)
+- Prueba de entrega (foto, firma, notas)
+- Entregas fallidas con motivo y reagendado
+- GPS del chofer y mapa de flota en vivo
+- Tracking público por link para el cliente final
+- Gestión de vehículos y choferes desde el panel
+- Compartir tracking por WhatsApp (`wa.me`)
+
+**Próximos pasos**
+- Notificaciones automáticas por WhatsApp (Meta Cloud API): "tu pedido va en camino", "eres la parada 3"
+- Bot de WhatsApp entrante: pedidos que llegan por chat y entran al pool
+- Laravel Reverb (WebSockets) en lugar de polling para los mapas en vivo
+- PWA para el chofer (GPS en background, modo offline)
+- OSRM y Nominatim self-hosted para eliminar límites de los servidores públicos
+- Multi-empresa (multi-tenancy) y API pública con webhooks
 
 ## Autor
 

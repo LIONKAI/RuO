@@ -16,7 +16,7 @@ beforeEach(function () {
 });
 
 test('an unplanned destination recalculates the route from the last completed stop', function () {
-    // Initial route keeps the loading order (the dropped longest leg is Arenales → Cañoto).
+    // Initial route anchored at the depot keeps the loading order.
     fakeOsrmTrip(legMeters: [1000, 1000, 1000, 5000]);
     $this->actingAs($this->admin)->post(route('admin.route.store', $this->vehicle));
     $first = $this->workday->destinations()->first();

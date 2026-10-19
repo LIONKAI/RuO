@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['vehicle_id', 'date', 'status', 'route_version', 'route_updated_at', 'total_km', 'estimated_fuel_liters', 'completed_at'])]
+#[Fillable(['vehicle_id', 'date', 'status', 'route_version', 'route_updated_at', 'total_km', 'estimated_fuel_liters', 'completed_at', 'last_latitude', 'last_longitude', 'last_position_at'])]
 class Workday extends Model
 {
     /** @use HasFactory<WorkdayFactory> */
@@ -42,6 +42,9 @@ class Workday extends Model
             'total_km' => 'decimal:2',
             'estimated_fuel_liters' => 'decimal:2',
             'completed_at' => 'datetime',
+            'last_latitude' => 'float',
+            'last_longitude' => 'float',
+            'last_position_at' => 'datetime',
         ];
     }
 
@@ -92,6 +95,29 @@ class Workday extends Model
     public function completedCount(): int
     {
         return $this->destinations->where('status', DestinationStatus::Completed)->count();
+    }
+
+    public function failedCount(): int
+    {
+        return $this->destinations->where('status', DestinationStatus::Failed)->count();
+    }
+
+    /**
+     * The driver's last reported GPS position, when available.
+     *
+     * @return array{latitude: float, longitude: float, at: string}|null
+     */
+    public function lastPosition(): ?array
+    {
+        if ($this->last_latitude === null || $this->last_longitude === null) {
+            return null;
+        }
+
+        return [
+            'latitude' => $this->last_latitude,
+            'longitude' => $this->last_longitude,
+            'at' => $this->last_position_at?->toIso8601String(),
+        ];
     }
 
     /**
