@@ -36,7 +36,10 @@ ENV APACHE_DOCUMENT_ROOT=/var/www/html/public
 RUN sed -ri 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf \
  && sed -ri 's!AllowOverride None!AllowOverride All!g' /etc/apache2/apache2.conf
 
+# Directorios de runtime (el .dockerignore excluye su contenido local)
 RUN php artisan package:discover --ansi \
+ && mkdir -p storage/framework/views storage/framework/sessions \
+    storage/framework/cache/data storage/app/public storage/logs \
  && chown -R www-data:www-data storage bootstrap/cache
 
 EXPOSE 80
