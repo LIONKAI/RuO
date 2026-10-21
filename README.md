@@ -53,7 +53,7 @@ Hay dos niveles:
 | Mapas | Leaflet, OSRM (rutas), Nominatim (geocodificación) |
 | Base de datos | MySQL 8 |
 | Tests | Pest 4 (61 tests) |
-| Despliegue | Railway + GitHub Actions |
+| Despliegue | Docker (Render, Railway) + GitHub Actions |
 
 ```
 app/
@@ -92,7 +92,22 @@ composer run dev
 | Chofer (Vehículo 1) | chofer1@ruo.com | chofer123 |
 | Chofer (Vehículo 2) | chofer2@ruo.com | chofer123 |
 
-## Despliegue en Railway
+## Despliegue
+
+### Opción A — Render + Aiven (gratis)
+
+App en Render (web service Docker, plan free) + MySQL en Aiven (plan free, 5 GB).
+
+1. **Base de datos (Aiven)**: en [aiven.io](https://aiven.io) → *New service → MySQL → Free plan*. Copia host, puerto, usuario (`avnadmin`), contraseña y base (`defaultdb`).
+2. **App (Render)**: en [render.com](https://render.com) → *New → Blueprint* → elegir este repo. `render.yaml` ya trae toda la config; Render pide solo los secretos (`APP_KEY`, `APP_URL`, `DB_*`, `NOMINATIM_USER_AGENT`).
+   - `APP_KEY`: `php artisan key:generate --show`
+   - `APP_URL`: el dominio `https://ruo-xxxx.onrender.com` que Render asigne
+3. El Dockerfile hace todo: compila assets, instala dependencias, migra, `storage:link` y siembra demo si `RUO_SEED_DEMO=true`.
+4. Ojo: el plan free de Render **duerme tras 15 min sin tráfico** (el primer request tarda ~1 min en despertar).
+
+> Las fotos de prueba de entrega usan el disco `public` (efímero en Render). Para persistirlas: disco persistente de Render montado en `storage/app/public` o `FILESYSTEM_DISK=s3`.
+
+### Opción B — Railway
 
 1. **New Project → Deploy from GitHub repo** y elegir este repositorio.
 2. Agregar un servicio **MySQL** al proyecto.

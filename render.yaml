@@ -1,0 +1,53 @@
+# Blueprint de Render: despliega RuO desde el Dockerfile.
+# Los valores sync:false los pide Render al aplicar el blueprint.
+services:
+  - type: web
+    name: ruo
+    runtime: docker
+    plan: free
+    region: oregon
+    healthCheckPath: /up
+    envVars:
+      - key: APP_NAME
+        value: RuO
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false # php artisan key:generate --show → base64:...
+      - key: APP_URL
+        sync: false # https://<tu-servicio>.onrender.com (sin / al final)
+      - key: APP_LOCALE
+        value: es
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: SESSION_DRIVER
+        value: database
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: CACHE_STORE
+        value: database
+      - key: QUEUE_CONNECTION
+        value: database
+      # --- MySQL de Aiven (plan gratis) ---
+      - key: DB_CONNECTION
+        value: mysql
+      - key: DB_HOST
+        sync: false # mysql-xxx.aivencloud.com
+      - key: DB_PORT
+        sync: false # p.ej. 20345
+      - key: DB_DATABASE
+        value: defaultdb
+      - key: DB_USERNAME
+        sync: false # avnadmin
+      - key: DB_PASSWORD
+        sync: false
+      # Aiven exige TLS; mysqlnd lo usa sin verificar el CA
+      - key: MYSQL_ATTR_SSL_VERIFY_SERVER_CERT
+        value: "false"
+      # --- Mapas ---
+      - key: NOMINATIM_USER_AGENT
+        sync: false # "RuO/1.0 (tu-email@ejemplo.com)"
+      - key: RUO_SEED_DEMO
+        value: "true"
