@@ -94,6 +94,9 @@ create trigger on_auth_user_created
     after insert on auth.users
     for each row execute function public.handle_new_user ();
 
+-- La función solo la usa el trigger: nadie debe poder llamarla por la API (/rest/v1/rpc).
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
+
 -- Bucket para prueba de entrega (fotos y firmas; privado, se sirven con signed URLs)
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('pod', 'pod', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
