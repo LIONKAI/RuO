@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { vehicles, workdays } from "@/db/schema";
@@ -11,6 +12,8 @@ import Link from "next/link";
 export const instant = false;
 
 export default async function TrackingPage({ params }: { params: Promise<{ token: string }> }) {
+    // Render por request: la página usa la fecha/hora actual (hoy en Bolivia, ETA).
+    await connection();
     const { token } = await params;
     const dest = await destinationByToken(token);
     if (!dest) notFound();

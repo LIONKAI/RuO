@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { destinations, vehicles, workdays } from "@/db/schema";
@@ -9,6 +10,8 @@ import { DestinationStatus, UserRole, todayIso, isIsoDate } from "@/lib/domain";
 export const instant = false;
 
 export default async function ResumenPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
+    // Render por request: la página usa la fecha/hora actual (hoy en Bolivia, ETA).
+    await connection();
     const user = await currentUser();
     if (!user) redirect("/login");
     if (user.role !== UserRole.Admin) redirect("/chofer");

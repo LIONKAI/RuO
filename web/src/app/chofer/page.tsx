@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { vehicles } from "@/db/schema";
@@ -17,6 +18,8 @@ const tagOf = (s: string) =>
     s === DestinationStatus.Completed ? "tag-done" : s === DestinationStatus.Failed ? "tag-alert" : "tag-accent";
 
 export default async function DriverPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
+    // Render por request: la página usa la fecha/hora actual (hoy en Bolivia, ETA).
+    await connection();
     const user = await currentUser();
     if (!user) redirect("/login");
     if (user.role !== UserRole.Driver) redirect("/admin");

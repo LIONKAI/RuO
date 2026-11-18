@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import Link from "next/link";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -12,6 +13,8 @@ import { DestinationStatus, UserRole, WorkdayStatus, formatTime, isIsoDate, toda
 export const instant = false;
 
 export default async function AdminDashboard({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
+    // Render por request: la página usa la fecha/hora actual (hoy en Bolivia, ETA).
+    await connection();
     const user = await currentUser();
     if (!user) redirect("/login");
     if (user.role !== UserRole.Admin) redirect("/chofer");

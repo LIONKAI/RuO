@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { vehicles, profiles } from "@/db/schema";
@@ -10,6 +11,8 @@ import { UserRole } from "@/lib/domain";
 export const instant = false;
 
 export default async function VehiculosPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
+    // Render por request: la página usa la fecha/hora actual (hoy en Bolivia, ETA).
+    await connection();
     const user = await currentUser();
     if (!user) redirect("/login");
     if (user.role !== UserRole.Admin) redirect("/chofer");
