@@ -1,8 +1,25 @@
+import 'server-only';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema';
 
-// Conexión directa a Postgres (DATABASE_URL de Supabase, modo "session pooler" recomendado).
-const client = postgres(process.env.DATABASE_URL!, { prepare: false });
+/**
+ * Conexión a Postgres de Supabase para Drizzle.
+ *
+ * En Vercel (serverless) usa el "Transaction pooler" de Supabase (puerto 6543):
+ * cada instancia abre pocas conexiones y el pooler las reparte, así no se agota
+ * el límite de conexiones del plan gratuito. `prepare: false` es obligatorio en
+ * ese modo. En desarrollo el cliente se reutiliza entre recargas en caliente.
+ */
+const globalForDb = globalThis as unknown as { ruoSql?: postgres.Sql };
+
+const client = globalForDb.ruoSql ?? postgres(process.env.DATABASE_URL!, {
+    prepare: false,
+    max: Number(process.env.DATABASE_POOL_MAX ?? 5),
+    idle_timeout: 20,
+    connect_timeout: 10,
+});
+
+if (process.env.NODE_ENV !== 'production') globalForDb.ruoSql = client;
 
 export const db = drizzle(client, { schema });

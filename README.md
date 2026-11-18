@@ -11,6 +11,8 @@ Plataforma de **logística de última milla**: el administrador carga los pedido
 
 Hecho en Santa Cruz de la Sierra, Bolivia
 
+> **Versión desplegada:** la app que corre en producción es el port a **Next.js + Supabase** en [`web/`](web/README.md), desplegado en **Vercel** (Root Directory: `web`). Esta raíz conserva la versión original en Laravel.
+
 ## Qué hace
 
 **Administrador**

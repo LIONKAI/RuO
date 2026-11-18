@@ -95,6 +95,40 @@ create trigger on_auth_user_created
     for each row execute function public.handle_new_user ();
 
 -- Bucket para prueba de entrega (fotos y firmas; privado, se sirven con signed URLs)
-insert into storage.buckets (id, name, public)
-values ('pod', 'pod', false)
-on conflict (id) do nothing;
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('pod', 'pod', false, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update
+    set public = false,
+        file_size_limit = excluded.file_size_limit,
+        allowed_mime_types = excluded.allowed_mime_types;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Seguridad: Row Level Security
+--
+-- La anon key viaja al navegador, así que sin RLS cualquiera podría leer o
+-- modificar estas tablas por la API REST de Supabase (incluido cambiar su
+-- propio rol a admin). El servidor de Next accede con Drizzle usando el rol
+-- "postgres" (DATABASE_URL), que no está sujeto a RLS, así que la app sigue
+-- funcionando igual. Por la API pública solo queda permitido que cada usuario
+-- lea su propio perfil (lo usan el login y el proxy para conocer el rol).
+-- ─────────────────────────────────────────────────────────────────────────────
+alter table public.profiles enable row level security;
+alter table public.vehicles enable row level security;
+alter table public.workdays enable row level security;
+alter table public.destinations enable row level security;
+
+drop policy if exists "profiles_select_own" on public.profiles;
+create policy "profiles_select_own" on public.profiles
+    for select to authenticated
+    using ((select auth.uid()) = id);
+
+-- Sin políticas de insert/update/delete: nadie puede escribir por la API pública.
+-- Las fotos y firmas se suben con la service role desde el servidor.
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Primer administrador: crea el usuario en Authentication → Users → Add user
+-- y luego promuévelo (cambia el correo):
+--
+--   update public.profiles set role = 'admin'
+--   where id = (select id from auth.users where email = 'admin@ruo.com');
+-- ─────────────────────────────────────────────────────────────────────────────

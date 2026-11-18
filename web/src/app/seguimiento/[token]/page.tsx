@@ -5,7 +5,7 @@ import { vehicles, workdays } from "@/db/schema";
 import { Logo } from "@/components/Logo";
 import { RouteMap } from "@/components/MapLoader";
 import { destinationByToken, destinationsOf, etaFor } from "@/lib/queries";
-import { DestinationStatus } from "@/lib/domain";
+import { DestinationStatus, formatDateTime, formatTime } from "@/lib/domain";
 import Link from "next/link";
 
 export const instant = false;
@@ -48,7 +48,7 @@ export default async function TrackingPage({ params }: { params: Promise<{ token
                         <>
                             <p className="mb-1 font-display text-2xl font-extrabold text-done uppercase">✓ Entregado</p>
                             <p className="text-sm text-neutral-600">
-                                {dest.completedAt ? new Date(dest.completedAt).toLocaleString("es-BO") : ""}
+                                {dest.completedAt ? formatDateTime(dest.completedAt) : ""}
                                 {dest.recipientName ? ` · Recibió: ${dest.recipientName}` : ""}
                             </p>
                         </>
@@ -65,7 +65,7 @@ export default async function TrackingPage({ params }: { params: Promise<{ token
                                 {queue === 0 ? "Eres la próxima parada" : `${queue} parada${queue > 1 ? "s" : ""} antes que tú`}
                             </p>
                             <p className="text-sm text-neutral-600">
-                                {eta ? `Llegada estimada: ${new Date(eta).toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}` : "Calculando tiempo de llegada…"}
+                                {eta ? `Llegada estimada: ${formatTime(eta)}` : "Calculando tiempo de llegada…"}
                                 {vehicle ? ` · ${vehicle.name}` : ""}
                             </p>
                         </>

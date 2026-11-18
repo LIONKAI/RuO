@@ -4,7 +4,7 @@ import { AppShell } from "@/components/AppShell";
 import { createDestination, deleteDestination, distribute, requeueDestination } from "../actions";
 import { poolFor, failedFor, trackingUrl } from "@/lib/queries";
 import { trackingLink } from "@/lib/services/whatsapp";
-import { UserRole, todayIso } from "@/lib/domain";
+import { UserRole, todayIso, isIsoDate } from "@/lib/domain";
 import { RouteMap } from "@/components/MapLoader";
 
 export const instant = false;
@@ -15,7 +15,7 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
     if (user.role !== UserRole.Admin) redirect("/chofer");
 
     const sp = await searchParams;
-    const date = sp.fecha ?? todayIso();
+    const date = isIsoDate(sp.fecha) ? sp.fecha : todayIso();
     const pool = await poolFor(date);
     const failed = await failedFor(date);
     const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://localhost:3000";

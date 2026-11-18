@@ -1,66 +1,100 @@
 "use server";
 
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db } from '@/db';
-import { destinations, vehicles } from '@/db/schema';
+import { destinations, vehicles, workdays } from '@/db/schema';
 import { geocode } from '@/lib/services/geocoder';
-import { distributeFleet, optimizeWorkday, workdayFor, todayIso } from '@/lib/queries';
-import { currentUser } from '@/lib/supabase';
-import { DestinationStatus, UserRole } from '@/lib/domain';
+import { RoutingServiceError } from '@/lib/services/osrm';
+import { distributeFleet, optimizeWorkday, todayIso } from '@/lib/queries';
+import { requireAdmin } from '@/lib/auth';
+import { formId, isUniqueViolation } from '@/lib/guards';
+import { DestinationStatus, UserRole, WorkdayStatus, isIsoDate } from '@/lib/domain';
 
-async function requireAdmin() {
-    const user = await currentUser();
-    if (!user || user.role !== UserRole.Admin) redirect('/login');
-    return user;
-}
+// Nota: redirect() funciona lanzando una excepción interna de Next, así que
+// nunca se llama dentro de un try/catch: el catch la atraparía como si fuera
+// un error. Cada acción calcula la URL de destino y redirige al final.
 
-const fail = (url: string, msg: string): never => redirect(`${url}?error=${encodeURIComponent(msg)}`);
+const withMessage = (url: string, key: 'ok' | 'error', message: string) =>
+    `${url}${url.includes('?') ? '&' : '?'}${key}=${encodeURIComponent(message)}`;
+
+const messageOf = (error: unknown, fallback: string) =>
+    error instanceof RoutingServiceError ? error.message : fallback;
+
+/** Fecha del formulario si es válida (YYYY-MM-DD); hoy en Bolivia si no. */
+const dateFrom = (formData: FormData, key = 'date'): string => {
+    const value = formData.get(key);
+    return isIsoDate(value) ? value : todayIso();
+};
+
+const text = (formData: FormData, key: string, max = 255): string =>
+    String(formData.get(key) ?? '').trim().slice(0, max);
+
+/** Coordenadas pegadas a mano, o null si no vinieron o no son válidas. */
+const manualCoordinates = (formData: FormData): { latitude: number; longitude: number } | null => {
+    const rawLatitude = String(formData.get('latitude') ?? '').trim();
+    const rawLongitude = String(formData.get('longitude') ?? '').trim();
+    if (!rawLatitude || !rawLongitude) return null;
+
+    const latitude = Number(rawLatitude);
+    const longitude = Number(rawLongitude);
+    const valid = Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+    return valid ? { latitude, longitude } : null;
+};
 
 export async function createDestination(formData: FormData) {
     await requireAdmin();
-    const date = String(formData.get('date') || todayIso());
+    const date = dateFrom(formData);
     const back = `/admin/pedidos?fecha=${date}`;
 
-    const address = String(formData.get('address') ?? '').trim();
-    const reference = String(formData.get('reference') ?? '').trim();
-    const phone = String(formData.get('phone') ?? '').trim() || null;
-    if (!address || !reference) fail(back, 'Dirección y referencia son obligatorias.');
+    const address = text(formData, 'address', 300);
+    const reference = text(formData, 'reference', 120);
+    const phone = text(formData, 'phone', 30) || null;
+    if (!address || !reference) redirect(withMessage(back, 'error', 'Dirección y referencia son obligatorias.'));
 
-    let latitude = Number(formData.get('latitude'));
-    let longitude = Number(formData.get('longitude'));
-    if (!latitude || !longitude) {
-        const geo = await geocode(address);
-        if (!geo) redirect(`${back}&error=${encodeURIComponent(`No se encontró «${address}» en el mapa. Sé más específico o pega coordenadas.`)}`);
-        latitude = geo.latitude;
-        longitude = geo.longitude;
+    let target = back;
+    try {
+        const coords = manualCoordinates(formData) ?? await geocode(address);
+        if (!coords) {
+            target = withMessage(back, 'error', `No se encontró «${address}» en el mapa. Sé más específico o pega coordenadas.`);
+        } else {
+            await db.insert(destinations).values({ address, reference, phone, ...coords, serviceDate: date });
+            revalidatePath('/admin/pedidos');
+        }
+    } catch (error) {
+        target = withMessage(back, 'error', messageOf(error, 'No se pudo guardar el pedido.'));
     }
 
-    await db.insert(destinations).values({
-        address, reference, phone, latitude, longitude, serviceDate: date,
-    });
-    revalidatePath('/admin/pedidos');
-    redirect(back);
+    redirect(target);
 }
 
+/** Elimina un pedido que sigue en el pool (los ya asignados a una ruta no se tocan). */
 export async function deleteDestination(formData: FormData) {
     await requireAdmin();
-    const id = Number(formData.get('id'));
-    const date = String(formData.get('date') || todayIso());
-    await db.delete(destinations).where(eq(destinations.id, id));
+    const date = dateFrom(formData);
+    const back = `/admin/pedidos?fecha=${date}`;
+    const id = formId(formData, 'id');
+    if (!id) redirect(back);
+
+    const removed = await db.delete(destinations)
+        .where(and(eq(destinations.id, id), isNull(destinations.workdayId)))
+        .returning({ id: destinations.id });
+
     revalidatePath('/admin/pedidos');
-    redirect(`/admin/pedidos?fecha=${date}`);
+    redirect(removed.length ? back : withMessage(back, 'error', 'Ese pedido ya fue asignado a una ruta.'));
 }
 
 /** Devuelve un fallido al pool para otra fecha. */
 export async function requeueDestination(formData: FormData) {
     await requireAdmin();
-    const id = Number(formData.get('id'));
-    const date = String(formData.get('date') || todayIso());
-    const newDate = String(formData.get('service_date') || date);
+    const date = dateFrom(formData);
+    const back = `/admin/pedidos?fecha=${date}`;
+    const id = formId(formData, 'id');
+    const newDate = dateFrom(formData, 'service_date');
+    if (!id) redirect(back);
 
-    await db.update(destinations).set({
+    const requeued = await db.update(destinations).set({
         workdayId: null,
         serviceDate: newDate,
         status: DestinationStatus.Pending,
@@ -71,76 +105,127 @@ export async function requeueDestination(formData: FormData) {
         legSteps: null,
         failureReason: null,
         failedAt: null,
-    }).where(eq(destinations.id, id));
+        updatedAt: new Date(),
+    }).where(and(eq(destinations.id, id), eq(destinations.status, DestinationStatus.Failed)))
+        .returning({ id: destinations.id });
 
     revalidatePath('/admin/pedidos');
-    redirect(`/admin/pedidos?fecha=${date}`);
+    redirect(requeued.length ? back : withMessage(back, 'error', 'Solo los destinos fallidos pueden volver a la cola.'));
 }
 
 export async function distribute(formData: FormData) {
     await requireAdmin();
-    const date = String(formData.get('date') || todayIso());
+    const date = dateFrom(formData);
+    const back = `/admin/pedidos?fecha=${date}`;
+
+    let target: string;
     try {
-        const r = await distributeFleet(date);
-        redirect(`/admin/pedidos?fecha=${date}&ok=${encodeURIComponent(`${r.assigned} pedidos repartidos en ${r.routes} rutas`)}`);
-    } catch (e) {
-        fail(`/admin/pedidos?fecha=${date}`, e instanceof Error ? e.message : 'Error al repartir');
+        const result = await distributeFleet(date);
+        revalidatePath('/admin');
+        revalidatePath('/admin/pedidos');
+        target = withMessage(back, 'ok', `${result.assigned} pedidos repartidos en ${result.routes} rutas`);
+    } catch (error) {
+        target = withMessage(back, 'error', messageOf(error, 'Error al repartir los pedidos.'));
     }
+
+    redirect(target);
 }
 
 export async function optimizeRoute(formData: FormData) {
     await requireAdmin();
-    const workdayId = Number(formData.get('workday_id'));
-    const date = String(formData.get('date') || todayIso());
-    const { workdays } = await import('@/db/schema');
-    const [workday] = await db.select().from(workdays).where(eq(workdays.id, workdayId));
-    if (!workday) fail('/admin', 'Jornada no encontrada');
+    const date = dateFrom(formData);
+    const back = `/admin?fecha=${date}`;
+    const workdayId = formId(formData, 'workday_id');
+
+    const [workday] = workdayId ? await db.select().from(workdays).where(eq(workdays.id, workdayId)) : [];
+    if (!workday) redirect(withMessage(back, 'error', 'Jornada no encontrada.'));
+
+    let target: string;
     try {
         await optimizeWorkday(workday);
-        redirect(`/admin?fecha=${date}&ok=Ruta reoptimizada`);
-    } catch (e) {
-        fail(`/admin?fecha=${date}`, e instanceof Error ? e.message : 'Error al optimizar');
+        revalidatePath('/admin');
+        target = withMessage(back, 'ok', 'Ruta reoptimizada');
+    } catch (error) {
+        target = withMessage(back, 'error', messageOf(error, 'Error al optimizar la ruta.'));
     }
+
+    redirect(target);
+}
+
+/** Busca un chofer por correo directamente en auth.users (sin paginar la Admin API). */
+async function driverIdByEmail(email: string): Promise<{ id: string; role: string } | null> {
+    const rows = await db.execute<{ id: string; role: string }>(sql`
+        select u.id, p.role
+        from auth.users u
+        join public.profiles p on p.id = u.id
+        where lower(u.email) = lower(${email})
+        limit 1
+    `);
+    return rows[0] ?? null;
 }
 
 export async function createVehicle(formData: FormData) {
     await requireAdmin();
-    const name = String(formData.get('name') ?? '').trim();
-    const plate = String(formData.get('plate') ?? '').trim();
-    const fuel = Number(formData.get('fuel_liters_per_km')) || 0.10;
-    const driverEmail = String(formData.get('driver_email') ?? '').trim() || null;
-    const depotAddress = String(formData.get('depot_address') ?? '').trim() || null;
+    const back = '/admin/vehiculos';
 
-    if (!name || !plate) fail('/admin/vehiculos', 'Nombre y placa son obligatorios.');
+    const name = text(formData, 'name', 80);
+    const plate = text(formData, 'plate', 20).toUpperCase();
+    const fuel = Number(formData.get('fuel_liters_per_km'));
+    const driverEmail = text(formData, 'driver_email', 254) || null;
+    const depotAddress = text(formData, 'depot_address', 300) || null;
 
-    let depotLatitude: number | null = null;
-    let depotLongitude: number | null = null;
-    if (depotAddress) {
-        const geo = await geocode(depotAddress);
-        if (!geo) redirect(`/admin/vehiculos?error=${encodeURIComponent(`No se encontró el depósito «${depotAddress}».`)}`);
-        depotLatitude = geo.latitude;
-        depotLongitude = geo.longitude;
+    if (!name || !plate) redirect(withMessage(back, 'error', 'Nombre y placa son obligatorios.'));
+
+    let target = back;
+    try {
+        let depot: { latitude: number; longitude: number } | null = null;
+        if (depotAddress) {
+            depot = await geocode(depotAddress);
+            if (!depot) throw new RoutingServiceError(`No se encontró el depósito «${depotAddress}».`);
+        }
+
+        let driverId: string | null = null;
+        if (driverEmail) {
+            const driver = await driverIdByEmail(driverEmail);
+            if (!driver) throw new RoutingServiceError(`No existe un usuario con correo «${driverEmail}».`);
+            if (driver.role !== UserRole.Driver) throw new RoutingServiceError(`«${driverEmail}» no tiene rol de chofer.`);
+            driverId = driver.id;
+        }
+
+        await db.insert(vehicles).values({
+            name,
+            plate,
+            fuelLitersPerKm: String(Number.isFinite(fuel) && fuel > 0 && fuel < 10 ? fuel : 0.1),
+            driverId,
+            depotAddress,
+            depotLatitude: depot?.latitude ?? null,
+            depotLongitude: depot?.longitude ?? null,
+        });
+        revalidatePath(back);
+    } catch (error) {
+        const message = isUniqueViolation(error)
+            ? 'Ya existe un vehículo con esa placa o ese chofer ya tiene vehículo asignado.'
+            : messageOf(error, 'No se pudo crear el vehículo.');
+        target = withMessage(back, 'error', message);
     }
 
-    let driverId: string | null = null;
-    if (driverEmail) {
-        const { supabaseAdmin } = await import('@/lib/supabase');
-        const { data: { users } } = await supabaseAdmin().auth.admin.listUsers();
-        driverId = users.find((u) => u.email === driverEmail)?.id ?? null;
-        if (!driverId) fail('/admin/vehiculos', `No existe un usuario con correo «${driverEmail}».`);
-    }
-
-    await db.insert(vehicles).values({ name, plate, fuelLitersPerKm: String(fuel), driverId, depotAddress, depotLatitude, depotLongitude });
-    revalidatePath('/admin/vehiculos');
-    redirect('/admin/vehiculos');
+    redirect(target);
 }
 
+/** Elimina un vehículo. Se bloquea si tiene una ruta en curso (borraría sus entregas en cascada). */
 export async function deleteVehicle(formData: FormData) {
     await requireAdmin();
-    const id = Number(formData.get('id'));
+    const back = '/admin/vehiculos';
+    const id = formId(formData, 'id');
+    if (!id) redirect(back);
+
+    const [running] = await db.select({ id: workdays.id }).from(workdays)
+        .where(and(eq(workdays.vehicleId, id), eq(workdays.status, WorkdayStatus.InProgress)))
+        .limit(1);
+    if (running) redirect(withMessage(back, 'error', 'Ese vehículo tiene una ruta en curso; termínala antes de eliminarlo.'));
+
     await db.delete(vehicles).where(eq(vehicles.id, id));
-    revalidatePath('/admin/vehiculos');
-    redirect('/admin/vehiculos');
+    revalidatePath(back);
+    redirect(back);
 }
 
-export { workdayFor };

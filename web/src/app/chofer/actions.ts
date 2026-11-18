@@ -1,107 +1,163 @@
 "use server";
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db } from '@/db';
 import { destinations, workdays } from '@/db/schema';
-import { currentUser, supabaseAdmin } from '@/lib/supabase';
-import { maybeCloseWorkday, optimizeWorkday } from '@/lib/queries';
-import { DestinationStatus } from '@/lib/domain';
+import type { Workday } from '@/db/schema';
+import { supabaseAdmin } from '@/lib/supabase';
+import { requireDriver } from '@/lib/auth';
+import { destinationsOf, maybeCloseWorkday, optimizeWorkday } from '@/lib/queries';
+import { POD_MIME_TYPES, driverStopError, formId, podFileError } from '@/lib/guards';
+import { DestinationStatus, WorkdayStatus, failureReasons } from '@/lib/domain';
 
-async function requireDriver() {
-    const user = await currentUser();
-    if (!user) redirect('/login');
-    return user;
+// redirect() nunca va dentro de try/catch (lanza una excepción interna de Next):
+// cada acción arma la URL de destino y redirige al final.
+
+/** Error con un mensaje apto para mostrarse al chofer. */
+class DriverActionError extends Error {}
+
+const toRoute = (key: 'ok' | 'error', message: string) => `/chofer?${key}=${encodeURIComponent(message)}`;
+
+/**
+ * Carga la parada con su jornada y comprueba que el chofer pueda actuar sobre
+ * ella: su vehículo, jornada en curso, parada pendiente y en el orden de la ruta.
+ * Port de DestinationPolicy::complete. Redirige con el motivo si no puede.
+ */
+async function authorizeStop(formData: FormData): Promise<{ destinationId: number; workday: Workday }> {
+    const { vehicle } = await requireDriver();
+    const destinationId = formId(formData, 'id');
+
+    const [destination] = destinationId
+        ? await db.select().from(destinations).where(eq(destinations.id, destinationId))
+        : [];
+    const [workday] = destination?.workdayId
+        ? await db.select().from(workdays).where(eq(workdays.id, destination.workdayId))
+        : [];
+    const stops = workday ? await destinationsOf(workday.id) : [];
+
+    const denied = driverStopError(vehicle?.id ?? null, workday ?? null, stops, destinationId ?? 0);
+    if (denied || !destinationId || !workday) redirect(toRoute('error', denied ?? 'Parada no encontrada.'));
+
+    return { destinationId, workday };
 }
 
-const fail = (msg: string): never => redirect(`/chofer?error=${encodeURIComponent(msg)}`);
+async function uploadPod(file: File, destinationId: number, kind: 'photo' | 'signature'): Promise<string> {
+    const invalid = podFileError(file);
+    if (invalid) throw new DriverActionError(kind === 'signature' ? 'La firma no es válida.' : invalid);
 
-async function uploadPod(file: File, destId: number, kind: 'photo' | 'signature'): Promise<string> {
-    const ext = file.name.split('.').pop() ?? (kind === 'signature' ? 'png' : 'jpg');
-    const path = `${destId}/${kind}-${Date.now()}.${ext}`;
-    const { error } = await supabaseAdmin().storage.from('pod').upload(path, file, { contentType: file.type, upsert: true });
-    if (error) throw new Error(`No se pudo subir el archivo: ${error.message}`);
+    const path = `${destinationId}/${kind}-${Date.now()}.${POD_MIME_TYPES[file.type]}`;
+    const { error } = await supabaseAdmin().storage.from('pod').upload(path, file, { contentType: file.type, upsert: false });
+    if (error) throw new DriverActionError(`No se pudo subir el archivo: ${error.message}`);
     return path;
 }
 
-export async function completeDestination(formData: FormData) {
-    await requireDriver();
-    const id = Number(formData.get('id'));
-    const workdayId = Number(formData.get('workday_id'));
-    const recipient = String(formData.get('recipient_name') ?? '').trim() || null;
-    const note = String(formData.get('pod_note') ?? '').trim() || null;
-    const lat = Number(formData.get('latitude')) || null;
-    const lng = Number(formData.get('longitude')) || null;
-    const photo = formData.get('photo') as File | null;
-    const signature = formData.get('signature') as File | null;
+const uploadedFile = (formData: FormData, key: string): File | null => {
+    const value = formData.get(key);
+    return value instanceof File && value.size > 0 ? value : null;
+};
 
+/** Tras cerrar una parada: cierra la jornada si fue la última, si no recalcula desde aquí. */
+async function afterStopClosed(workday: Workday, done: string): Promise<string> {
+    await maybeCloseWorkday(workday);
+    const [fresh] = await db.select().from(workdays).where(eq(workdays.id, workday.id));
+
+    if (fresh && fresh.status !== WorkdayStatus.Completed) {
+        try {
+            await optimizeWorkday(fresh);
+        } catch {
+            return toRoute('ok', `${done}. No se pudo recalcular la ruta; se mantiene el orden actual.`);
+        }
+    }
+
+    return toRoute('ok', done);
+}
+
+export async function completeDestination(formData: FormData) {
+    const { destinationId, workday } = await authorizeStop(formData);
+
+    const recipient = String(formData.get('recipient_name') ?? '').trim().slice(0, 120) || null;
+    const note = String(formData.get('pod_note') ?? '').trim().slice(0, 500) || null;
+    const latitude = Number(formData.get('latitude'));
+    const longitude = Number(formData.get('longitude'));
+    const hasPosition = Number.isFinite(latitude) && Number.isFinite(longitude) && latitude !== 0 && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+    const photo = uploadedFile(formData, 'photo');
+    const signature = uploadedFile(formData, 'signature');
+
+    let target: string;
     try {
-        const patch: Record<string, unknown> = {
+        const patch: Partial<typeof destinations.$inferInsert> = {
             status: DestinationStatus.Completed,
             completedAt: new Date(),
             recipientName: recipient,
             podNote: note,
-            deliveredLatitude: lat,
-            deliveredLongitude: lng,
+            deliveredLatitude: hasPosition ? latitude : null,
+            deliveredLongitude: hasPosition ? longitude : null,
+            updatedAt: new Date(),
         };
-        if (photo && photo.size > 0) patch.podPhotoPath = await uploadPod(photo, id, 'photo');
-        if (signature && signature.size > 0) patch.podSignaturePath = await uploadPod(signature, id, 'signature');
+        if (photo) patch.podPhotoPath = await uploadPod(photo, destinationId, 'photo');
+        if (signature) patch.podSignaturePath = await uploadPod(signature, destinationId, 'signature');
 
-        await db.update(destinations).set(patch).where(eq(destinations.id, id));
-    } catch (e) {
-        fail(e instanceof Error ? e.message : 'No se pudo completar la entrega');
-    }
+        const updated = await db.update(destinations).set(patch)
+            .where(and(eq(destinations.id, destinationId), eq(destinations.status, DestinationStatus.Pending)))
+            .returning({ id: destinations.id });
+        if (!updated.length) throw new DriverActionError('Este destino ya no está pendiente.');
 
-    const [workday] = await db.select().from(workdays).where(eq(workdays.id, workdayId));
-    if (workday) {
-        await maybeCloseWorkday(workday);
-        const [fresh] = await db.select().from(workdays).where(eq(workdays.id, workdayId));
-        if (fresh && fresh.status !== 'completed') await optimizeWorkday(fresh);
+        target = await afterStopClosed(workday, 'Entrega registrada');
+    } catch (error) {
+        target = toRoute('error', error instanceof DriverActionError ? error.message : 'No se pudo completar la entrega.');
     }
 
     revalidatePath('/chofer');
-    redirect('/chofer?ok=Entrega registrada');
+    redirect(target);
 }
 
 export async function failDestination(formData: FormData) {
-    await requireDriver();
-    const id = Number(formData.get('id'));
-    const workdayId = Number(formData.get('workday_id'));
-    const reason = String(formData.get('failure_reason') ?? '').trim();
-    if (!reason) fail('Selecciona un motivo de falla.');
+    const { destinationId, workday } = await authorizeStop(formData);
 
-    await db.update(destinations).set({
-        status: DestinationStatus.Failed,
-        failureReason: reason,
-        failedAt: new Date(),
-    }).where(eq(destinations.id, id));
+    const reasonKey = String(formData.get('failure_reason') ?? '');
+    if (!(reasonKey in failureReasons)) redirect(toRoute('error', 'Selecciona un motivo de falla.'));
 
-    const [workday] = await db.select().from(workdays).where(eq(workdays.id, workdayId));
-    if (workday) {
-        await maybeCloseWorkday(workday);
-        const [fresh] = await db.select().from(workdays).where(eq(workdays.id, workdayId));
-        if (fresh && fresh.status !== 'completed') await optimizeWorkday(fresh);
+    let target: string;
+    try {
+        const updated = await db.update(destinations).set({
+            status: DestinationStatus.Failed,
+            failureReason: failureReasons[reasonKey],
+            failedAt: new Date(),
+            updatedAt: new Date(),
+        }).where(and(eq(destinations.id, destinationId), eq(destinations.status, DestinationStatus.Pending)))
+            .returning({ id: destinations.id });
+        if (!updated.length) throw new DriverActionError('Este destino ya no está pendiente.');
+
+        target = await afterStopClosed(workday, 'Parada marcada como fallida');
+    } catch (error) {
+        target = toRoute('error', error instanceof DriverActionError ? error.message : 'No se pudo registrar la falla.');
     }
 
     revalidatePath('/chofer');
-    redirect('/chofer?ok=Parada marcada como fallida');
+    redirect(target);
 }
 
-export async function reportPosition(formData: FormData) {
-    await requireDriver();
-    const workdayId = Number(formData.get('workday_id'));
-    const lat = Number(formData.get('latitude'));
-    const lng = Number(formData.get('longitude'));
-    if (!lat || !lng || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
-        return { ok: false };
-    }
+/** Guarda la posición GPS del chofer, solo en la jornada en curso de su propio vehículo. */
+export async function reportPosition(formData: FormData): Promise<{ ok: boolean }> {
+    const { vehicle } = await requireDriver();
+    const workdayId = formId(formData, 'workday_id');
+    const latitude = Number(formData.get('latitude'));
+    const longitude = Number(formData.get('longitude'));
 
-    await db.update(workdays).set({
-        lastLatitude: lat,
-        lastLongitude: lng,
+    const valid = Number.isFinite(latitude) && Number.isFinite(longitude) && latitude !== 0 && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180;
+    if (!vehicle || !workdayId || !valid) return { ok: false };
+
+    const updated = await db.update(workdays).set({
+        lastLatitude: latitude,
+        lastLongitude: longitude,
         lastPositionAt: new Date(),
-    }).where(eq(workdays.id, workdayId));
+    }).where(and(
+        eq(workdays.id, workdayId),
+        eq(workdays.vehicleId, vehicle.id),
+        eq(workdays.status, WorkdayStatus.InProgress),
+    )).returning({ id: workdays.id });
 
-    return { ok: true };
+    return { ok: updated.length > 0 };
 }

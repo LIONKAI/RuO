@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { destinations, vehicles, workdays } from "@/db/schema";
 import { currentUser } from "@/lib/supabase";
 import { AppShell } from "@/components/AppShell";
-import { DestinationStatus, UserRole, todayIso } from "@/lib/domain";
+import { DestinationStatus, UserRole, todayIso, isIsoDate } from "@/lib/domain";
 
 export const instant = false;
 
@@ -14,7 +14,7 @@ export default async function ResumenPage({ searchParams }: { searchParams: Prom
     if (user.role !== UserRole.Admin) redirect("/chofer");
 
     const sp = await searchParams;
-    const date = sp.fecha ?? todayIso();
+    const date = isIsoDate(sp.fecha) ? sp.fecha : todayIso();
     const fleet = await db.select().from(vehicles).orderBy(vehicles.id);
     const days = await db.select().from(workdays).where(eq(workdays.date, date));
 

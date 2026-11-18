@@ -7,7 +7,7 @@ import { currentUser } from "@/lib/supabase";
 import { AppShell } from "@/components/AppShell";
 import { RouteMap, type MapStop } from "@/components/MapLoader";
 import { optimizeRoute } from "./actions";
-import { DestinationStatus, UserRole, WorkdayStatus, todayIso, workdayStatusLabel } from "@/lib/domain";
+import { DestinationStatus, UserRole, WorkdayStatus, formatTime, isIsoDate, todayIso, workdayStatusLabel } from "@/lib/domain";
 
 export const instant = false;
 
@@ -17,7 +17,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
     if (user.role !== UserRole.Admin) redirect("/chofer");
 
     const sp = await searchParams;
-    const date = sp.fecha ?? todayIso();
+    const date = isIsoDate(sp.fecha) ? sp.fecha : todayIso();
 
     const fleet = await db.select().from(vehicles).orderBy(vehicles.id);
     const days = await db.select().from(workdays).where(eq(workdays.date, date));
@@ -75,7 +75,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                                     </div>
                                 )}
                                 {day?.lastLatitude != null && (
-                                    <p className="text-xs text-neutral-500">📍 Última posición: {day.lastPositionAt ? new Date(day.lastPositionAt).toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" }) : "—"}</p>
+                                    <p className="text-xs text-neutral-500">📍 Última posición: {day.lastPositionAt ? formatTime(day.lastPositionAt) : "—"}</p>
                                 )}
                                 {day && dests.some((d) => d.status === DestinationStatus.Pending) && (
                                     <form action={optimizeRoute} className="mt-3">
