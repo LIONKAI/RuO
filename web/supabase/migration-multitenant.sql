@@ -52,8 +52,14 @@ create index if not exists vehicles_company_idx on public.vehicles (company_id);
 create index if not exists workdays_company_date_idx on public.workdays (company_id, date);
 create index if not exists destinations_company_idx on public.destinations (company_id, service_date);
 
--- 7) RLS también en companies
+-- 7) RLS también en companies: cada usuario solo lee SU empresa
 alter table public.companies enable row level security;
+
+drop policy if exists "companies_select_own" on public.companies;
+create policy "companies_select_own" on public.companies
+    for select to authenticated
+    using (id = (select company_id from public.profiles where id = (select auth.uid())));
+
 
 commit;
 

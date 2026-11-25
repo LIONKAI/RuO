@@ -32,10 +32,10 @@ export default async function PlataformaPage({ searchParams }: { searchParams: P
 
     const rows = await db.select({
         c: companies,
-        admins: sql<number>`(select count(*) from profiles p where p.company_id = ${companies.id} and p.role = 'admin')`,
-        drivers: sql<number>`(select count(*) from profiles p where p.company_id = ${companies.id} and p.role = 'driver')`,
-        vehiclesCount: sql<number>`(select count(*) from vehicles v where v.company_id = ${companies.id})`,
-        pedidosHoy: sql<number>`(select count(*) from destinations d where d.company_id = ${companies.id} and d.service_date = ${today})`,
+        admins: sql<number>`(select count(*) from profiles p where p.company_id = companies.id and p.role = 'admin')`,
+        drivers: sql<number>`(select count(*) from profiles p where p.company_id = companies.id and p.role = 'driver')`,
+        vehiclesCount: sql<number>`(select count(*) from vehicles v where v.company_id = companies.id)`,
+        pedidosHoy: sql<number>`(select count(*) from destinations d where d.company_id = companies.id and d.service_date = ${today})`,
     }).from(companies).orderBy(companies.createdAt);
 
     return (

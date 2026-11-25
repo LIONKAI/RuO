@@ -133,6 +133,12 @@ create policy "profiles_select_own" on public.profiles
     for select to authenticated
     using ((select auth.uid()) = id);
 
+drop policy if exists "companies_select_own" on public.companies;
+create policy "companies_select_own" on public.companies
+    for select to authenticated
+    using (id = (select company_id from public.profiles where id = (select auth.uid())));
+
+
 -- Sin políticas de escritura ni de lectura cruzada: todo lo demás pasa por el servidor.
 
 -- ─────────────────────────────────────────────────────────────────────────────
