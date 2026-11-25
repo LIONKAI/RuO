@@ -4,7 +4,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db } from '@/db';
-import { destinations, vehicles, workdays } from '@/db/schema';
+import { destinations, profiles, vehicles, workdays } from '@/db/schema';
 import { geocode } from '@/lib/services/geocoder';
 import { RoutingServiceError } from '@/lib/services/osrm';
 import { distributeFleet, optimizeWorkday, todayIso } from '@/lib/queries';
@@ -63,6 +63,7 @@ export async function createDestination(formData: FormData) {
             revalidatePath('/admin/pedidos');
         }
     } catch (error) {
+        console.error('[createDestination]', error);
         target = withMessage(back, 'error', messageOf(error, 'No se pudo guardar el pedido.'));
     }
 
@@ -125,6 +126,7 @@ export async function distribute(formData: FormData) {
         revalidatePath('/admin/pedidos');
         target = withMessage(back, 'ok', `${result.assigned} pedidos repartidos en ${result.routes} rutas`);
     } catch (error) {
+        console.error('[distribute]', error);
         target = withMessage(back, 'error', messageOf(error, 'Error al repartir los pedidos.'));
     }
 
@@ -146,6 +148,7 @@ export async function optimizeRoute(formData: FormData) {
         revalidatePath('/admin');
         target = withMessage(back, 'ok', 'Ruta reoptimizada');
     } catch (error) {
+        console.error('[optimizeRoute]', error);
         target = withMessage(back, 'error', messageOf(error, 'Error al optimizar la ruta.'));
     }
 
@@ -178,14 +181,21 @@ export async function createVehicle(formData: FormData) {
 
     let target = back;
     try {
-        let depot: { latitude: number; longitude: number } | null = null;
-        if (depotAddress) {
+        let depot: { latitude: number; longitude: number } | null = manualCoordinates(formData);
+        if (!depot && depotAddress) {
             depot = await geocode(depotAddress);
-            if (!depot) throw new RoutingServiceError(`No se encontró el depósito «${depotAddress}».`);
+            if (!depot) throw new RoutingServiceError(`No se encontró el depósito «${depotAddress}». Pega las coordenadas manualmente (Google Maps → clic derecho → copiar).`);
         }
 
         let driverId: string | null = null;
-        if (driverEmail) {
+        const driverIdRaw = text(formData, 'driver_id', 40) || null;
+        if (driverIdRaw) {
+            const [driver] = await db.select().from(profiles).where(eq(profiles.id, driverIdRaw)).limit(1);
+            if (!driver) throw new RoutingServiceError('El chofer seleccionado no existe.');
+            if (driver.role !== UserRole.Driver) throw new RoutingServiceError('Ese usuario no tiene rol de chofer.');
+            driverId = driver.id;
+        } else if (driverEmail) {
+            // Compatibilidad con el campo de correo libre (formularios viejos).
             const driver = await driverIdByEmail(driverEmail);
             if (!driver) throw new RoutingServiceError(`No existe un usuario con correo «${driverEmail}».`);
             if (driver.role !== UserRole.Driver) throw new RoutingServiceError(`«${driverEmail}» no tiene rol de chofer.`);
@@ -203,6 +213,9 @@ export async function createVehicle(formData: FormData) {
         });
         revalidatePath(back);
     } catch (error) {
+        // El error real queda en los logs de Vercel; al usuario solo le llega
+        // un mensaje accionable. Sin esto, cualquier falla inesperada es invisible.
+        console.error('[createVehicle]', error);
         const message = isUniqueViolation(error)
             ? 'Ya existe un vehículo con esa placa o ese chofer ya tiene vehículo asignado.'
             : messageOf(error, 'No se pudo crear el vehículo.');

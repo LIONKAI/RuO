@@ -66,7 +66,8 @@ async function afterStopClosed(workday: Workday, done: string): Promise<string> 
     if (fresh && fresh.status !== WorkdayStatus.Completed) {
         try {
             await optimizeWorkday(fresh);
-        } catch {
+        } catch (error) {
+            console.error('[afterStopClosed/optimize]', error);
             return toRoute('ok', `${done}. No se pudo recalcular la ruta; se mantiene el orden actual.`);
         }
     }
@@ -106,6 +107,7 @@ export async function completeDestination(formData: FormData) {
 
         target = await afterStopClosed(workday, 'Entrega registrada');
     } catch (error) {
+        console.error('[completeDestination]', error);
         target = toRoute('error', error instanceof DriverActionError ? error.message : 'No se pudo completar la entrega.');
     }
 
@@ -132,6 +134,7 @@ export async function failDestination(formData: FormData) {
 
         target = await afterStopClosed(workday, 'Parada marcada como fallida');
     } catch (error) {
+        console.error('[failDestination]', error);
         target = toRoute('error', error instanceof DriverActionError ? error.message : 'No se pudo registrar la falla.');
     }
 

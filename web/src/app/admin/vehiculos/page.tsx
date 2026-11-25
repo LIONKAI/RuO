@@ -23,6 +23,11 @@ export default async function VehiculosPage({ searchParams }: { searchParams: Pr
         .leftJoin(profiles, eq(vehicles.driverId, profiles.id))
         .orderBy(vehicles.id);
 
+    // Choferes disponibles para el select: rol driver que aún no tienen vehículo.
+    const assignedIds = fleet.map(({ v }) => v.driverId).filter((id): id is string => id !== null);
+    const drivers = await db.select().from(profiles).where(eq(profiles.role, UserRole.Driver));
+    const availableDrivers = drivers.filter((d) => !assignedIds.includes(d.id));
+
     return (
         <AppShell user={user} section="admin">
             <p className="eyebrow mb-1 text-ruo-600">Gestión</p>
@@ -46,12 +51,32 @@ export default async function VehiculosPage({ searchParams }: { searchParams: Pr
                             <input name="fuel_liters_per_km" type="number" step="0.001" defaultValue="0.10" className="input" />
                         </div>
                         <div>
-                            <label className="label">Correo del chofer <span className="text-neutral-400 normal-case">(opcional)</span></label>
-                            <input name="driver_email" type="email" className="input" placeholder="chofer1@ruo.com" />
+                            <label className="label">Chofer <span className="text-neutral-400 normal-case">(opcional)</span></label>
+                            <select name="driver_id" className="input">
+                                <option value="">Sin chofer asignado</option>
+                                {availableDrivers.map((d) => (
+                                    <option key={d.id} value={d.id}>{d.name}</option>
+                                ))}
+                            </select>
+                            {availableDrivers.length === 0 && (
+                                <p className="mt-1 text-[11px] text-neutral-500">
+                                    No hay choferes libres. Crea usuarios en Supabase → Authentication con rol driver.
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className="label">Base / depósito <span className="text-neutral-400 normal-case">(dirección, opcional)</span></label>
                             <input name="depot_address" className="input" placeholder="Av. Santos Dumont km 4, Santa Cruz" />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="label">Latitud base <span className="text-neutral-400 normal-case">(opcional)</span></label>
+                                <input name="latitude" type="number" step="any" className="input" placeholder="-17.78" />
+                            </div>
+                            <div>
+                                <label className="label">Longitud base <span className="text-neutral-400 normal-case">(opcional)</span></label>
+                                <input name="longitude" type="number" step="any" className="input" placeholder="-63.18" />
+                            </div>
                         </div>
                         <button className="btn btn-primary">+ Registrar vehículo</button>
                     </form>
