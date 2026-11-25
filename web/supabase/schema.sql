@@ -1,17 +1,35 @@
--- RuO · esquema Postgres para Supabase
+-- RuO · esquema Postgres para Supabase (multi-empresa)
 -- Ejecutar en: Supabase → SQL Editor → New query → pegar → Run
+-- Para bases ya existentes NO uses este archivo: usa migration-multitenant.sql
 
--- Perfiles ligados a auth.users (rol admin | driver)
+-- Empresas clientes del SaaS. La api_key identifica a la empresa en la API
+-- de integraciones (bot de WhatsApp / n8n).
+create table if not exists public.companies (
+    id uuid primary key default gen_random_uuid(),
+    name text not null,
+    slug text not null unique,
+    active boolean not null default true,
+    api_key text not null unique default replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''),
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
+-- Perfiles ligados a auth.users.
+-- role: 'superadmin' (dueño de la plataforma, company_id null)
+--       'admin'      (dueño/despachador de una empresa)
+--       'driver'     (chofer de una empresa)
 create table if not exists public.profiles (
     id uuid primary key references auth.users (id) on delete cascade,
+    company_id uuid references public.companies (id) on delete cascade,
     name text not null,
-    role text not null default 'driver' check (role in ('admin', 'driver')),
+    role text not null default 'driver' check (role in ('superadmin', 'admin', 'driver')),
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
 
 create table if not exists public.vehicles (
     id bigint generated always as identity primary key,
+    company_id uuid not null references public.companies (id) on delete cascade,
     driver_id uuid unique references public.profiles (id) on delete set null,
     name text not null,
     plate text not null unique,
@@ -23,8 +41,11 @@ create table if not exists public.vehicles (
     updated_at timestamptz not null default now()
 );
 
+create index if not exists vehicles_company_idx on public.vehicles (company_id);
+
 create table if not exists public.workdays (
     id bigint generated always as identity primary key,
+    company_id uuid not null references public.companies (id) on delete cascade,
     vehicle_id bigint not null references public.vehicles (id) on delete cascade,
     date date not null,
     status text not null default 'draft' check (status in ('draft', 'in_progress', 'completed')),
@@ -41,8 +62,11 @@ create table if not exists public.workdays (
     unique (vehicle_id, date)
 );
 
+create index if not exists workdays_company_date_idx on public.workdays (company_id, date);
+
 create table if not exists public.destinations (
     id bigint generated always as identity primary key,
+    company_id uuid not null references public.companies (id) on delete cascade,
     workday_id bigint references public.workdays (id) on delete cascade, -- null = pool de pedidos
     address text not null,
     reference text not null,
@@ -73,29 +97,12 @@ create table if not exists public.destinations (
 
 create index if not exists destinations_workday_position_idx on public.destinations (workday_id, position);
 create index if not exists destinations_service_date_idx on public.destinations (service_date, workday_id);
+create index if not exists destinations_company_idx on public.destinations (company_id, service_date);
 
--- Perfil automático al registrarse (rol driver por defecto; el admin se promueve a mano)
-create or replace function public.handle_new_user ()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
-as $$
-begin
-    insert into public.profiles (id, name, role)
-    values (new.id, coalesce(new.raw_user_meta_data ->> 'name', new.email), 'driver')
-    on conflict (id) do nothing;
-    return new;
-end;
-$$;
-
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created
-    after insert on auth.users
-    for each row execute function public.handle_new_user ();
-
--- La función solo la usa el trigger: nadie debe poder llamarla por la API (/rest/v1/rpc).
-revoke execute on function public.handle_new_user() from public, anon, authenticated;
+-- Los perfiles los crea la aplicación (server actions con service role):
+-- el registro de empresa y el alta de choferes pasan por /registro y
+-- /admin/choferes, que controlan rol y empresa. No hay trigger automático
+-- porque el rol y la empresa NUNCA deben venir de metadata del cliente.
 
 -- Bucket para prueba de entrega (fotos y firmas; privado, se sirven con signed URLs)
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -109,12 +116,13 @@ on conflict (id) do update
 -- Seguridad: Row Level Security
 --
 -- La anon key viaja al navegador, así que sin RLS cualquiera podría leer o
--- modificar estas tablas por la API REST de Supabase (incluido cambiar su
--- propio rol a admin). El servidor de Next accede con Drizzle usando el rol
--- "postgres" (DATABASE_URL), que no está sujeto a RLS, así que la app sigue
--- funcionando igual. Por la API pública solo queda permitido que cada usuario
--- lea su propio perfil (lo usan el login y el proxy para conocer el rol).
+-- modificar estas tablas por la API REST de Supabase. El servidor de Next
+-- accede con Drizzle usando el rol "postgres" (DATABASE_URL), que no está
+-- sujeto a RLS, así que la app sigue funcionando igual. Por la API pública
+-- solo queda permitido que cada usuario lea su propio perfil (lo usan el
+-- login y el proxy para conocer el rol).
 -- ─────────────────────────────────────────────────────────────────────────────
+alter table public.companies enable row level security;
 alter table public.profiles enable row level security;
 alter table public.vehicles enable row level security;
 alter table public.workdays enable row level security;
@@ -125,13 +133,15 @@ create policy "profiles_select_own" on public.profiles
     for select to authenticated
     using ((select auth.uid()) = id);
 
--- Sin políticas de insert/update/delete: nadie puede escribir por la API pública.
--- Las fotos y firmas se suben con la service role desde el servidor.
+-- Sin políticas de escritura ni de lectura cruzada: todo lo demás pasa por el servidor.
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Primer administrador: crea el usuario en Authentication → Users → Add user
--- y luego promuévelo (cambia el correo):
+-- Superadministrador de la plataforma: crea el usuario en
+-- Authentication → Users → Add user y luego (cambia el correo):
 --
---   update public.profiles set role = 'admin'
---   where id = (select id from auth.users where email = 'admin@ruo.com');
+--   insert into public.profiles (id, name, role, company_id)
+--   values ((select id from auth.users where email = 'tu-correo@ruo.com'), 'Tu Nombre', 'superadmin', null)
+--   on conflict (id) do update set role = 'superadmin', company_id = null;
+--
+-- Las empresas clientes NO se crean a mano: se registran solas en /registro.
 -- ─────────────────────────────────────────────────────────────────────────────

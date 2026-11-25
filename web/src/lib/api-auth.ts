@@ -1,20 +1,23 @@
 import 'server-only';
-import { timingSafeEqual } from 'node:crypto';
+import { and, eq } from 'drizzle-orm';
+import { db } from '@/db';
+import { companies, type Company } from '@/db/schema';
 
 /**
- * Autenticación de la API para integraciones (n8n, bots).
- * El cliente envía `Authorization: Bearer <RUO_API_KEY>`.
+ * Autenticación de la API para integraciones (n8n, bots de WhatsApp).
+ * Cada empresa tiene su propia api_key (visible en /admin/config): el cliente
+ * envía `Authorization: Bearer <api_key>` y la key identifica a qué empresa
+ * pertenece el pedido. Empresas suspendidas quedan rechazadas automáticamente.
  */
-export function isAuthorizedApiRequest(request: Request): boolean {
-    const expected = process.env.RUO_API_KEY ?? '';
-    if (expected.length < 24) return false; // sin clave configurada, la API queda cerrada
-
+export async function companyForApiRequest(request: Request): Promise<Company | null> {
     const header = request.headers.get('authorization') ?? '';
-    const provided = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    const key = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    if (key.length < 24) return null;
 
-    const a = Buffer.from(provided);
-    const b = Buffer.from(expected);
-    return a.length === b.length && timingSafeEqual(a, b);
+    const [company] = await db.select().from(companies)
+        .where(and(eq(companies.apiKey, key), eq(companies.active, true)))
+        .limit(1);
+    return company ?? null;
 }
 
 export const unauthorized = () =>

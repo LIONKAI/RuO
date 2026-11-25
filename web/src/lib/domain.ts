@@ -15,6 +15,7 @@ export const WorkdayStatus = {
 export type WorkdayStatus = (typeof WorkdayStatus)[keyof typeof WorkdayStatus];
 
 export const UserRole = {
+    Superadmin: 'superadmin',
     Admin: 'admin',
     Driver: 'driver',
 } as const;

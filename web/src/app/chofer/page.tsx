@@ -27,7 +27,7 @@ export default async function DriverPage({ searchParams }: { searchParams: Promi
     const date = todayIso();
 
     const [vehicle] = await db.select().from(vehicles).where(eq(vehicles.driverId, user.id));
-    const workday = vehicle ? await workdayFor(vehicle.id, date) : null;
+    const workday = vehicle ? await workdayFor(vehicle.id, date, vehicle.companyId) : null;
     const dests = workday ? await destinationsOf(workday.id) : [];
     const active = activeStop(dests);
 

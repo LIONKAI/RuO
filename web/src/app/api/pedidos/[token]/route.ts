@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { vehicles, workdays } from '@/db/schema';
-import { isAuthorizedApiRequest, unauthorized } from '@/lib/api-auth';
+import { companyForApiRequest, unauthorized } from '@/lib/api-auth';
 import { destinationByToken, destinationsOf, etaFor, trackingUrl } from '@/lib/queries';
 import { DestinationStatus, WorkdayStatus, destinationStatusLabel, formatTime, type DestinationStatus as Status } from '@/lib/domain';
 
@@ -10,11 +10,15 @@ import { DestinationStatus, WorkdayStatus, destinationStatusLabel, formatTime, t
  * ("¿dónde está mi pedido?"): estado, paradas antes y hora estimada.
  */
 export async function GET(request: Request, { params }: { params: Promise<{ token: string }> }) {
-    if (!isAuthorizedApiRequest(request)) return unauthorized();
+    const company = await companyForApiRequest(request);
+    if (!company) return unauthorized();
 
     const { token } = await params;
     const dest = await destinationByToken(token);
-    if (!dest) return Response.json({ ok: false, error: 'Pedido no encontrado.' }, { status: 404 });
+    // El token solo se revela si el pedido pertenece a la empresa de la key.
+    if (!dest || dest.companyId !== company.id) {
+        return Response.json({ ok: false, error: 'Pedido no encontrado.' }, { status: 404 });
+    }
 
     const [workday] = dest.workdayId ? await db.select().from(workdays).where(eq(workdays.id, dest.workdayId)) : [];
     const [vehicle] = workday ? await db.select().from(vehicles).where(eq(vehicles.id, workday.vehicleId)) : [];

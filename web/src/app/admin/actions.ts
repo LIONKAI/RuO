@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db } from '@/db';
@@ -44,7 +44,7 @@ const manualCoordinates = (formData: FormData): { latitude: number; longitude: n
 };
 
 export async function createDestination(formData: FormData) {
-    await requireAdmin();
+    const { companyId } = await requireAdmin();
     const date = dateFrom(formData);
     const back = `/admin/pedidos?fecha=${date}`;
 
@@ -59,7 +59,7 @@ export async function createDestination(formData: FormData) {
         if (!coords) {
             target = withMessage(back, 'error', `No se encontró «${address}» en el mapa. Sé más específico o pega coordenadas.`);
         } else {
-            await db.insert(destinations).values({ address, reference, phone, ...coords, serviceDate: date });
+            await db.insert(destinations).values({ companyId, address, reference, phone, ...coords, serviceDate: date });
             revalidatePath('/admin/pedidos');
         }
     } catch (error) {
@@ -72,14 +72,14 @@ export async function createDestination(formData: FormData) {
 
 /** Elimina un pedido que sigue en el pool (los ya asignados a una ruta no se tocan). */
 export async function deleteDestination(formData: FormData) {
-    await requireAdmin();
+    const { companyId } = await requireAdmin();
     const date = dateFrom(formData);
     const back = `/admin/pedidos?fecha=${date}`;
     const id = formId(formData, 'id');
     if (!id) redirect(back);
 
     const removed = await db.delete(destinations)
-        .where(and(eq(destinations.id, id), isNull(destinations.workdayId)))
+        .where(and(eq(destinations.id, id), isNull(destinations.workdayId), eq(destinations.companyId, companyId)))
         .returning({ id: destinations.id });
 
     revalidatePath('/admin/pedidos');
@@ -88,7 +88,7 @@ export async function deleteDestination(formData: FormData) {
 
 /** Devuelve un fallido al pool para otra fecha. */
 export async function requeueDestination(formData: FormData) {
-    await requireAdmin();
+    const { companyId } = await requireAdmin();
     const date = dateFrom(formData);
     const back = `/admin/pedidos?fecha=${date}`;
     const id = formId(formData, 'id');
@@ -107,7 +107,7 @@ export async function requeueDestination(formData: FormData) {
         failureReason: null,
         failedAt: null,
         updatedAt: new Date(),
-    }).where(and(eq(destinations.id, id), eq(destinations.status, DestinationStatus.Failed)))
+    }).where(and(eq(destinations.id, id), eq(destinations.status, DestinationStatus.Failed), eq(destinations.companyId, companyId)))
         .returning({ id: destinations.id });
 
     revalidatePath('/admin/pedidos');
@@ -115,13 +115,13 @@ export async function requeueDestination(formData: FormData) {
 }
 
 export async function distribute(formData: FormData) {
-    await requireAdmin();
+    const { companyId } = await requireAdmin();
     const date = dateFrom(formData);
     const back = `/admin/pedidos?fecha=${date}`;
 
     let target: string;
     try {
-        const result = await distributeFleet(date);
+        const result = await distributeFleet(date, companyId);
         revalidatePath('/admin');
         revalidatePath('/admin/pedidos');
         target = withMessage(back, 'ok', `${result.assigned} pedidos repartidos en ${result.routes} rutas`);
@@ -134,12 +134,12 @@ export async function distribute(formData: FormData) {
 }
 
 export async function optimizeRoute(formData: FormData) {
-    await requireAdmin();
+    const { companyId } = await requireAdmin();
     const date = dateFrom(formData);
     const back = `/admin?fecha=${date}`;
     const workdayId = formId(formData, 'workday_id');
 
-    const [workday] = workdayId ? await db.select().from(workdays).where(eq(workdays.id, workdayId)) : [];
+    const [workday] = workdayId ? await db.select().from(workdays).where(and(eq(workdays.id, workdayId), eq(workdays.companyId, companyId))) : [];
     if (!workday) redirect(withMessage(back, 'error', 'Jornada no encontrada.'));
 
     let target: string;
@@ -155,26 +155,13 @@ export async function optimizeRoute(formData: FormData) {
     redirect(target);
 }
 
-/** Busca un chofer por correo directamente en auth.users (sin paginar la Admin API). */
-async function driverIdByEmail(email: string): Promise<{ id: string; role: string } | null> {
-    const rows = await db.execute<{ id: string; role: string }>(sql`
-        select u.id, p.role
-        from auth.users u
-        join public.profiles p on p.id = u.id
-        where lower(u.email) = lower(${email})
-        limit 1
-    `);
-    return rows[0] ?? null;
-}
-
 export async function createVehicle(formData: FormData) {
-    await requireAdmin();
+    const { companyId } = await requireAdmin();
     const back = '/admin/vehiculos';
 
     const name = text(formData, 'name', 80);
     const plate = text(formData, 'plate', 20).toUpperCase();
     const fuel = Number(formData.get('fuel_liters_per_km'));
-    const driverEmail = text(formData, 'driver_email', 254) || null;
     const depotAddress = text(formData, 'depot_address', 300) || null;
 
     if (!name || !plate) redirect(withMessage(back, 'error', 'Nombre y placa son obligatorios.'));
@@ -191,18 +178,13 @@ export async function createVehicle(formData: FormData) {
         const driverIdRaw = text(formData, 'driver_id', 40) || null;
         if (driverIdRaw) {
             const [driver] = await db.select().from(profiles).where(eq(profiles.id, driverIdRaw)).limit(1);
-            if (!driver) throw new RoutingServiceError('El chofer seleccionado no existe.');
+            if (!driver || driver.companyId !== companyId) throw new RoutingServiceError('El chofer seleccionado no existe.');
             if (driver.role !== UserRole.Driver) throw new RoutingServiceError('Ese usuario no tiene rol de chofer.');
-            driverId = driver.id;
-        } else if (driverEmail) {
-            // Compatibilidad con el campo de correo libre (formularios viejos).
-            const driver = await driverIdByEmail(driverEmail);
-            if (!driver) throw new RoutingServiceError(`No existe un usuario con correo «${driverEmail}».`);
-            if (driver.role !== UserRole.Driver) throw new RoutingServiceError(`«${driverEmail}» no tiene rol de chofer.`);
             driverId = driver.id;
         }
 
         await db.insert(vehicles).values({
+            companyId,
             name,
             plate,
             fuelLitersPerKm: String(Number.isFinite(fuel) && fuel > 0 && fuel < 10 ? fuel : 0.1),
@@ -227,17 +209,17 @@ export async function createVehicle(formData: FormData) {
 
 /** Elimina un vehículo. Se bloquea si tiene una ruta en curso (borraría sus entregas en cascada). */
 export async function deleteVehicle(formData: FormData) {
-    await requireAdmin();
+    const { companyId } = await requireAdmin();
     const back = '/admin/vehiculos';
     const id = formId(formData, 'id');
     if (!id) redirect(back);
 
     const [running] = await db.select({ id: workdays.id }).from(workdays)
-        .where(and(eq(workdays.vehicleId, id), eq(workdays.status, WorkdayStatus.InProgress)))
+        .where(and(eq(workdays.vehicleId, id), eq(workdays.status, WorkdayStatus.InProgress), eq(workdays.companyId, companyId)))
         .limit(1);
     if (running) redirect(withMessage(back, 'error', 'Ese vehículo tiene una ruta en curso; termínala antes de eliminarlo.'));
 
-    await db.delete(vehicles).where(eq(vehicles.id, id));
+    await db.delete(vehicles).where(and(eq(vehicles.id, id), eq(vehicles.companyId, companyId)));
     revalidatePath(back);
     redirect(back);
 }

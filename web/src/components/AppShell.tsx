@@ -14,13 +14,17 @@ const adminNav = [
     ["/admin", "Flota"],
     ["/admin/pedidos", "Pedidos"],
     ["/admin/vehiculos", "Vehículos"],
+    ["/admin/choferes", "Choferes"],
     ["/admin/resumen", "Resumen"],
+    ["/admin/config", "Config"],
 ] as const;
 
 const driverNav = [["/chofer", "Mi ruta"]] as const;
 
-export function AppShell({ user, section, children }: { user: SessionUser; section: "admin" | "chofer"; children: React.ReactNode }) {
-    const nav = section === "admin" ? adminNav : driverNav;
+const plataformaNav = [["/plataforma", "Empresas"]] as const;
+
+export function AppShell({ user, section, children }: { user: SessionUser; section: "admin" | "chofer" | "plataforma"; children: React.ReactNode }) {
+    const nav = section === "admin" ? adminNav : section === "plataforma" ? plataformaNav : driverNav;
     const showMobileNav = nav.length > 1;
 
     return (

@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { vehicles, profiles } from "@/db/schema";
-import { currentUser } from "@/lib/supabase";
+import { requireAdmin } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { DepotPicker } from "@/components/DepotPicker";
 import { createVehicle, deleteVehicle } from "../actions";
@@ -14,19 +13,18 @@ export const instant = false;
 export default async function VehiculosPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
     // Render por request: la página usa la fecha/hora actual (hoy en Bolivia, ETA).
     await connection();
-    const user = await currentUser();
-    if (!user) redirect("/login");
-    if (user.role !== UserRole.Admin) redirect("/chofer");
+    const { user, companyId } = await requireAdmin();
     const sp = await searchParams;
 
     const fleet = await db.select({ v: vehicles, driver: profiles })
         .from(vehicles)
         .leftJoin(profiles, eq(vehicles.driverId, profiles.id))
+        .where(eq(vehicles.companyId, companyId))
         .orderBy(vehicles.id);
 
     // Choferes disponibles para el select: rol driver que aún no tienen vehículo.
     const assignedIds = fleet.map(({ v }) => v.driverId).filter((id): id is string => id !== null);
-    const drivers = await db.select().from(profiles).where(eq(profiles.role, UserRole.Driver));
+    const drivers = await db.select().from(profiles).where(and(eq(profiles.role, UserRole.Driver), eq(profiles.companyId, companyId)));
     const availableDrivers = drivers.filter((d) => !assignedIds.includes(d.id));
 
     return (
@@ -61,7 +59,7 @@ export default async function VehiculosPage({ searchParams }: { searchParams: Pr
                             </select>
                             {availableDrivers.length === 0 && (
                                 <p className="mt-1 text-[11px] text-neutral-500">
-                                    No hay choferes libres. Crea usuarios en Supabase → Authentication con rol driver.
+                                    No hay choferes libres. Créalos desde la sección «Choferes».
                                 </p>
                             )}
                         </div>

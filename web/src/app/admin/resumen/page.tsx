@@ -1,25 +1,22 @@
-import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { destinations, vehicles, workdays } from "@/db/schema";
-import { currentUser } from "@/lib/supabase";
+import { requireAdmin } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
-import { DestinationStatus, UserRole, todayIso, isIsoDate } from "@/lib/domain";
+import { DestinationStatus, todayIso, isIsoDate } from "@/lib/domain";
 
 export const instant = false;
 
 export default async function ResumenPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
     // Render por request: la página usa la fecha/hora actual (hoy en Bolivia, ETA).
     await connection();
-    const user = await currentUser();
-    if (!user) redirect("/login");
-    if (user.role !== UserRole.Admin) redirect("/chofer");
+    const { user, companyId } = await requireAdmin();
 
     const sp = await searchParams;
     const date = isIsoDate(sp.fecha) ? sp.fecha : todayIso();
-    const fleet = await db.select().from(vehicles).orderBy(vehicles.id);
-    const days = await db.select().from(workdays).where(eq(workdays.date, date));
+    const fleet = await db.select().from(vehicles).where(eq(vehicles.companyId, companyId)).orderBy(vehicles.id);
+    const days = await db.select().from(workdays).where(and(eq(workdays.date, date), eq(workdays.companyId, companyId)));
 
     const rows = await Promise.all(days.map(async (day) => {
         const dests = await db.select().from(destinations).where(eq(destinations.workdayId, day.id));

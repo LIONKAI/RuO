@@ -20,7 +20,13 @@ export async function AuthLink({
     guestHref?: string;
 }) {
     const user = await currentUser().catch(() => null);
-    const href = user ? (user.role === UserRole.Admin ? "/admin" : "/chofer") : guestHref;
+    const href = user
+        ? user.role === UserRole.Superadmin
+            ? "/plataforma"
+            : user.role === UserRole.Admin
+                ? "/admin"
+                : "/chofer"
+        : guestHref;
 
     return (
         <Link href={href} className={className}>

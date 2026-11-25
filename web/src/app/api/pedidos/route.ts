@@ -1,6 +1,6 @@
 import { db } from '@/db';
 import { destinations } from '@/db/schema';
-import { isAuthorizedApiRequest, unauthorized } from '@/lib/api-auth';
+import { companyForApiRequest, unauthorized } from '@/lib/api-auth';
 import { geocode } from '@/lib/services/geocoder';
 import { RoutingServiceError } from '@/lib/services/osrm';
 import { trackingUrl } from '@/lib/queries';
@@ -19,7 +19,8 @@ import { isIsoDate, todayIso } from '@/lib/domain';
  *   latitud / longitud (opcional)     si el cliente compartió ubicación
  */
 export async function POST(request: Request) {
-    if (!isAuthorizedApiRequest(request)) return unauthorized();
+    const company = await companyForApiRequest(request);
+    if (!company) return unauthorized();
 
     const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
     if (!body || typeof body !== 'object') {
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
     const reference = (detalle ? `${cliente} — ${detalle}` : cliente).slice(0, 120);
 
     const [created] = await db.insert(destinations).values({
+        companyId: company.id,
         address: direccion,
         reference,
         phone: telefono,

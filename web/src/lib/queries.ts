@@ -11,14 +11,14 @@ import type { Destination, Vehicle, Workday } from '@/db/schema';
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Workday del vehículo para una fecha; la crea si no existe (seguro ante requests concurrentes). */
-export async function workdayFor(vehicleId: number, date: string): Promise<Workday> {
+export async function workdayFor(vehicleId: number, date: string, companyId: string): Promise<Workday> {
     const find = () => withDbRetry(() =>
         db.select().from(workdays).where(and(eq(workdays.vehicleId, vehicleId), eq(workdays.date, date))));
 
     const [existing] = await find();
     if (existing) return existing;
 
-    const [created] = await db.insert(workdays).values({ vehicleId, date }).onConflictDoNothing().returning();
+    const [created] = await db.insert(workdays).values({ vehicleId, date, companyId }).onConflictDoNothing().returning();
     if (created) return created;
 
     const [raced] = await find();
@@ -32,15 +32,15 @@ export async function destinationsOf(workdayId: number): Promise<Destination[]> 
 }
 
 /** Pedidos del pool (sin asignar) para una fecha. */
-export async function poolFor(date: string): Promise<Destination[]> {
+export async function poolFor(date: string, companyId: string): Promise<Destination[]> {
     return withDbRetry(() => db.select().from(destinations)
-        .where(and(isNull(destinations.workdayId), eq(destinations.serviceDate, date), eq(destinations.status, DestinationStatus.Pending))));
+        .where(and(isNull(destinations.workdayId), eq(destinations.serviceDate, date), eq(destinations.status, DestinationStatus.Pending), eq(destinations.companyId, companyId))));
 }
 
 /** Fallidos del día (para reagendar). */
-export async function failedFor(date: string): Promise<Destination[]> {
+export async function failedFor(date: string, companyId: string): Promise<Destination[]> {
     return withDbRetry(() => db.select().from(destinations)
-        .where(and(eq(destinations.serviceDate, date), eq(destinations.status, DestinationStatus.Failed))));
+        .where(and(eq(destinations.serviceDate, date), eq(destinations.status, DestinationStatus.Failed), eq(destinations.companyId, companyId))));
 }
 
 interface RoutePlan {
@@ -125,11 +125,11 @@ export async function optimizeWorkday(workday: Workday): Promise<void> {
  * Primero se calculan todas las rutas; solo si OSRM respondió para todas se
  * escriben juntas en una transacción (todo o nada).
  */
-export async function distributeFleet(date: string): Promise<{ assigned: number; routes: number }> {
-    const pool = await poolFor(date);
+export async function distributeFleet(date: string, companyId: string): Promise<{ assigned: number; routes: number }> {
+    const pool = await poolFor(date, companyId);
     if (pool.length === 0) throw new RoutingServiceError('No hay pedidos pendientes de repartir en esa fecha.');
 
-    const fleet = await db.select().from(vehicles);
+    const fleet = await withDbRetry(() => db.select().from(vehicles).where(eq(vehicles.companyId, companyId)));
     if (fleet.length === 0) throw new RoutingServiceError('No hay vehículos disponibles para repartir.');
 
     const groups = splitPool(pool, fleet.map((v) => ({
@@ -145,7 +145,7 @@ export async function distributeFleet(date: string): Promise<{ assigned: number;
     for (const [vehicleId, items] of groups) {
         if (items.length === 0) continue;
         const vehicle = byId.get(vehicleId)!;
-        const workday = await workdayFor(vehicle.id, date);
+        const workday = await workdayFor(vehicle.id, date, companyId);
         plans.push({ workday, plan: await planWorkday(workday, vehicle, items), assigned: items.length });
     }
 

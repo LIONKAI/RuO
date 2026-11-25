@@ -1,8 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
-const PROTECTED = ['/admin', '/chofer'];
-const ROLE_HOME: Record<string, string> = { admin: '/admin', driver: '/chofer' };
+const PROTECTED = ['/admin', '/chofer', '/plataforma'];
+const ROLE_HOME: Record<string, string> = { superadmin: '/plataforma', admin: '/admin', driver: '/chofer' };
 
 /**
  * Proxy (antes "middleware" en Next <16): refresca la cookie de sesión de
@@ -62,5 +62,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/admin/:path*', '/chofer/:path*', '/login'],
+    matcher: ['/admin/:path*', '/chofer/:path*', '/plataforma/:path*', '/login'],
 };

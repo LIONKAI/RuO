@@ -22,11 +22,11 @@ async function login(formData: FormData) {
     const { data: { user } } = await supabase.auth.getUser();
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", user!.id).single();
 
-    redirect(profile?.role === UserRole.Admin ? "/admin" : "/chofer");
+    redirect(profile?.role === UserRole.Superadmin ? "/plataforma" : profile?.role === UserRole.Admin ? "/admin" : "/chofer");
 }
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
-    const { error } = await searchParams;
+    const { error, ok } = await searchParams;
 
     return (
         <div className="flex min-h-screen flex-col bg-ruo-50">
@@ -41,7 +41,14 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
 
                     {error && (
                         <p className="mb-4 border border-alert bg-alert-50 px-3 py-2 text-sm text-alert">
-                            Credenciales incorrectas. Verifica tu correo y contraseña.
+                            {error === "sin-empresa"
+                                ? "Tu cuenta no está vinculada a una empresa. Contacta a soporte."
+                                : "Credenciales incorrectas. Verifica tu correo y contraseña."}
+                        </p>
+                    )}
+                    {ok === "cuenta-creada" && (
+                        <p className="mb-4 border border-done bg-done-50 px-3 py-2 text-sm text-done">
+                            Cuenta creada. Ingresa con tu correo y contraseña.
                         </p>
                     )}
 
@@ -56,6 +63,10 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
                         </div>
                         <button type="submit" className="btn btn-primary mt-2 w-full py-2.5">Ingresar →</button>
                     </form>
+
+                    <p className="mt-4 text-center text-xs text-neutral-500">
+                        ¿Eres una empresa nueva? <Link href="/registro" className="text-ruo-600 underline">Regístrate aquí</Link>
+                    </p>
                 </div>
             </main>
         </div>

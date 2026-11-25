@@ -41,6 +41,10 @@ export interface SessionUser {
     email: string;
     name: string;
     role: UserRole;
+    /** Empresa a la que pertenece (null solo en superadmin). */
+    companyId: string | null;
+    companyName: string | null;
+    companyActive: boolean;
 }
 
 /** Usuario actual + perfil (rol). null si no hay sesión.
@@ -62,14 +66,19 @@ export async function currentUser(): Promise<SessionUser | null> {
 
     const { data: profile } = await supabase
         .from('profiles')
-        .select('name, role')
+        .select('name, role, company_id, companies(name, active)')
         .eq('id', user.id)
         .single();
+
+    const company = Array.isArray(profile?.companies) ? profile?.companies[0] : profile?.companies;
 
     return {
         id: user.id,
         email: user.email ?? '',
         name: profile?.name ?? user.email ?? '',
         role: (profile?.role as UserRole) ?? 'driver',
+        companyId: profile?.company_id ?? null,
+        companyName: company?.name ?? null,
+        companyActive: company?.active ?? true,
     };
 }

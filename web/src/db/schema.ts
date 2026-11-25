@@ -1,15 +1,27 @@
 import { boolean, date, doublePrecision, index, integer, jsonb, numeric, pgTable, text, timestamp, unique, uuid } from 'drizzle-orm/pg-core';
 
+export const companies = pgTable('companies', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull().unique(),
+    active: boolean('active').notNull().default(true),
+    apiKey: text('api_key').notNull().unique(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const profiles = pgTable('profiles', {
     id: uuid('id').primaryKey(),
+    companyId: uuid('company_id').references(() => companies.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
-    role: text('role', { enum: ['admin', 'driver'] }).notNull().default('driver'),
+    role: text('role', { enum: ['superadmin', 'admin', 'driver'] }).notNull().default('driver'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const vehicles = pgTable('vehicles', {
     id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    companyId: uuid('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
     driverId: uuid('driver_id').unique().references(() => profiles.id, { onDelete: 'set null' }),
     name: text('name').notNull(),
     plate: text('plate').notNull().unique(),
@@ -25,6 +37,7 @@ export const workdays = pgTable(
     'workdays',
     {
         id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+        companyId: uuid('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
         vehicleId: integer('vehicle_id').notNull().references(() => vehicles.id, { onDelete: 'cascade' }),
         date: date('date').notNull(),
         status: text('status', { enum: ['draft', 'in_progress', 'completed'] }).notNull().default('draft'),
@@ -46,6 +59,7 @@ export const destinations = pgTable(
     'destinations',
     {
         id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+        companyId: uuid('company_id').notNull().references(() => companies.id, { onDelete: 'cascade' }),
         workdayId: integer('workday_id').references(() => workdays.id, { onDelete: 'cascade' }),
         address: text('address').notNull(),
         reference: text('reference').notNull(),
@@ -79,6 +93,7 @@ export const destinations = pgTable(
     ],
 );
 
+export type Company = typeof companies.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
 export type Vehicle = typeof vehicles.$inferSelect;
 export type Workday = typeof workdays.$inferSelect;

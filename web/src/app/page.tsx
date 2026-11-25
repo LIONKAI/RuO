@@ -188,7 +188,7 @@ export default function Landing() {
                 <h2 className="mb-3 font-display text-[clamp(34px,5vw,56px)] leading-none font-extrabold uppercase">¿Listo para optimizar?</h2>
                 <p className="mb-8 text-ruo-100">Para flotas de 2 a 5 vehículos. Hecho para Bolivia.</p>
                 <Suspense fallback={<Link href={fallbackCta} className="btn border-white bg-white px-8 py-3 text-[15px] text-ruo-800 hover:bg-ruo-50">Comenzar ahora →</Link>}>
-                    <AuthLink className="btn border-white bg-white px-8 py-3 text-[15px] text-ruo-800 hover:bg-ruo-50">Comenzar ahora →</AuthLink>
+                    <AuthLink guestHref="/registro" className="btn border-white bg-white px-8 py-3 text-[15px] text-ruo-800 hover:bg-ruo-50">Comenzar ahora →</AuthLink>
                 </Suspense>
             </section>
 

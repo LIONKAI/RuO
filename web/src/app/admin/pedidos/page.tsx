@@ -1,11 +1,10 @@
-import { redirect } from "next/navigation";
 import { connection } from "next/server";
-import { currentUser } from "@/lib/supabase";
+import { requireAdmin } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
 import { createDestination, deleteDestination, distribute, requeueDestination } from "../actions";
 import { poolFor, failedFor, trackingUrl } from "@/lib/queries";
 import { trackingLink } from "@/lib/services/whatsapp";
-import { UserRole, todayIso, isIsoDate } from "@/lib/domain";
+import { todayIso, isIsoDate } from "@/lib/domain";
 import { RouteMap } from "@/components/MapLoader";
 
 export const instant = false;
@@ -13,14 +12,12 @@ export const instant = false;
 export default async function PedidosPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
     // Render por request: la página usa la fecha/hora actual (hoy en Bolivia, ETA).
     await connection();
-    const user = await currentUser();
-    if (!user) redirect("/login");
-    if (user.role !== UserRole.Admin) redirect("/chofer");
+    const { user, companyId } = await requireAdmin();
 
     const sp = await searchParams;
     const date = isIsoDate(sp.fecha) ? sp.fecha : todayIso();
-    const pool = await poolFor(date);
-    const failed = await failedFor(date);
+    const pool = await poolFor(date, companyId);
+    const failed = await failedFor(date, companyId);
     const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://localhost:3000";
 
     return (
