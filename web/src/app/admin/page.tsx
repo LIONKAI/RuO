@@ -40,7 +40,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     <p className="eyebrow text-ruo-600">Flota · {date}</p>
                     <h1 className="font-display text-3xl font-extrabold uppercase">Panel del día</h1>
                 </div>
-                <form className="flex items-end gap-2">
+                <form className="flex flex-wrap items-end gap-2">
                     <div>
                         <label className="label">Fecha</label>
                         <input type="date" name="fecha" defaultValue={date} className="input py-1.5" />
@@ -100,6 +100,7 @@ export default async function AdminDashboard({ searchParams }: { searchParams: P
                     stops={liveStops}
                     geometry={geometries.length ? geometries : null}
                     height={520}
+                    mobileHeight={300}
                 />
             </div>
         </AppShell>

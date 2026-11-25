@@ -80,6 +80,7 @@ export default async function TrackingPage({ params }: { params: Promise<{ token
                     geometry={geometry}
                     live={workday?.lastLatitude != null ? { latitude: workday.lastLatitude, longitude: workday.lastLongitude! } : null}
                     height={380}
+                    mobileHeight={260}
                 />
 
                 <p className="mt-6 text-center text-xs text-neutral-400">Recarga la página para actualizar la posición.</p>

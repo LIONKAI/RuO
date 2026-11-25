@@ -121,8 +121,8 @@ export function PodForm({ destinationId, workdayId }: { destinationId: number; w
     return (
         <div className="flex flex-col gap-2">
             <div className="flex gap-2">
-                <button type="button" onClick={() => locate("complete")} className="btn btn-success px-3 py-1.5 text-xs">✓ Entregar</button>
-                <button type="button" onClick={() => locate("fail")} className="btn btn-alert px-3 py-1.5 text-xs">✕ Falló</button>
+                <button type="button" onClick={() => locate("complete")} className="btn btn-success flex-1 px-4 py-3 text-sm">✓ Entregar</button>
+                <button type="button" onClick={() => locate("fail")} className="btn btn-alert flex-1 px-4 py-3 text-sm">✕ Falló</button>
             </div>
 
             {open === "complete" && (

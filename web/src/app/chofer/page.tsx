@@ -64,7 +64,7 @@ export default async function DriverPage({ searchParams }: { searchParams: Promi
                             const steps = (d.legSteps as OsrmLegStep[] | null) ?? [];
                             return (
                                 <div key={d.id} className={`corners border bg-white p-5 ${d.status === DestinationStatus.Pending ? "border-ruo-200" : "border-neutral-200 opacity-75"}`}>
-                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                    <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                                         <div className="flex items-center gap-3">
                                             <span className="flex size-8 items-center justify-center bg-ruo-600 font-display text-base font-bold text-white">{d.position ?? "•"}</span>
                                             <div>
@@ -97,7 +97,7 @@ export default async function DriverPage({ searchParams }: { searchParams: Promi
                             );
                         })}
                     </div>
-                    <RouteMap stops={stops} geometry={geometry.length ? geometry : null} height={560} />
+                    <RouteMap stops={stops} geometry={geometry.length ? geometry : null} height={560} mobileHeight={280} />
                 </div>
             )}
         </AppShell>

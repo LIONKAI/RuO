@@ -4,6 +4,7 @@ import { db } from '@/db';
 import { destinations, vehicles, workdays } from '@/db/schema';
 import { planRoute, RoutingServiceError, type PlannedStop } from '@/lib/services/osrm';
 import { splitPool } from '@/lib/services/fleet';
+import { withDbRetry } from '@/lib/retry';
 import { DestinationStatus, WorkdayStatus, todayIso, type Coordinates } from '@/lib/domain';
 import type { Destination, Vehicle, Workday } from '@/db/schema';
 
@@ -11,7 +12,8 @@ type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 /** Workday del vehículo para una fecha; la crea si no existe (seguro ante requests concurrentes). */
 export async function workdayFor(vehicleId: number, date: string): Promise<Workday> {
-    const find = () => db.select().from(workdays).where(and(eq(workdays.vehicleId, vehicleId), eq(workdays.date, date)));
+    const find = () => withDbRetry(() =>
+        db.select().from(workdays).where(and(eq(workdays.vehicleId, vehicleId), eq(workdays.date, date))));
 
     const [existing] = await find();
     if (existing) return existing;
@@ -24,21 +26,21 @@ export async function workdayFor(vehicleId: number, date: string): Promise<Workd
 }
 
 export async function destinationsOf(workdayId: number): Promise<Destination[]> {
-    return db.select().from(destinations)
+    return withDbRetry(() => db.select().from(destinations)
         .where(eq(destinations.workdayId, workdayId))
-        .orderBy(asc(destinations.position), asc(destinations.id));
+        .orderBy(asc(destinations.position), asc(destinations.id)));
 }
 
 /** Pedidos del pool (sin asignar) para una fecha. */
 export async function poolFor(date: string): Promise<Destination[]> {
-    return db.select().from(destinations)
-        .where(and(isNull(destinations.workdayId), eq(destinations.serviceDate, date), eq(destinations.status, DestinationStatus.Pending)));
+    return withDbRetry(() => db.select().from(destinations)
+        .where(and(isNull(destinations.workdayId), eq(destinations.serviceDate, date), eq(destinations.status, DestinationStatus.Pending))));
 }
 
 /** Fallidos del día (para reagendar). */
 export async function failedFor(date: string): Promise<Destination[]> {
-    return db.select().from(destinations)
-        .where(and(eq(destinations.serviceDate, date), eq(destinations.status, DestinationStatus.Failed)));
+    return withDbRetry(() => db.select().from(destinations)
+        .where(and(eq(destinations.serviceDate, date), eq(destinations.status, DestinationStatus.Failed))));
 }
 
 interface RoutePlan {
@@ -100,7 +102,7 @@ async function writePlan(tx: Transaction, workday: Workday, plan: RoutePlan, reo
 }
 
 async function vehicleOf(workday: Workday): Promise<Vehicle | null> {
-    const [vehicle] = await db.select().from(vehicles).where(eq(vehicles.id, workday.vehicleId));
+    const [vehicle] = await withDbRetry(() => db.select().from(vehicles).where(eq(vehicles.id, workday.vehicleId)));
     return vehicle ?? null;
 }
 
@@ -193,7 +195,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Destino por su token público; un token mal formado no llega a la BD (evita un error de cast a uuid). */
 export async function destinationByToken(token: string) {
     if (!UUID.test(token)) return null;
-    const [dest] = await db.select().from(destinations).where(eq(destinations.publicToken, token));
+    const [dest] = await withDbRetry(() => db.select().from(destinations).where(eq(destinations.publicToken, token)));
     return dest ?? null;
 }
 

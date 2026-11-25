@@ -111,6 +111,17 @@
         @apply relative z-0 w-full bg-ruo-50;
     }
 
+    /* Altura de mapa responsiva: --map-h-m en móvil, --map-h en desktop. */
+    .map-h {
+        height: var(--map-h-m, 300px);
+    }
+
+    @media (min-width: 1024px) {
+        .map-h {
+            height: var(--map-h, 520px);
+        }
+    }
+
     .stop-marker {
         @apply flex items-center justify-center border-2 border-white font-display text-xs font-bold text-white shadow;
         width: 26px;

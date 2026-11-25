@@ -91,11 +91,11 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                                             <p className="text-xs text-neutral-500">{d.address}{d.phone ? ` · ${d.phone}` : ""}</p>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            {wa && <a href={wa} target="_blank" className="btn btn-ghost px-2 py-1 text-xs text-done">WhatsApp ↗</a>}
+                                            {wa && <a href={wa} target="_blank" className="btn btn-ghost px-3 py-2 text-xs text-done">WhatsApp ↗</a>}
                                             <form action={deleteDestination}>
                                                 <input type="hidden" name="id" value={d.id} />
                                                 <input type="hidden" name="date" value={date} />
-                                                <button className="btn btn-ghost px-2 py-1 text-xs text-alert">Quitar</button>
+                                                <button className="btn btn-ghost px-3 py-2 text-xs text-alert">Quitar</button>
                                             </form>
                                         </div>
                                     </div>
@@ -117,8 +117,8 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                                         <form action={requeueDestination} className="flex items-end gap-1">
                                             <input type="hidden" name="id" value={d.id} />
                                             <input type="hidden" name="date" value={date} />
-                                            <input type="date" name="service_date" defaultValue={date} className="input px-2 py-1 text-xs" />
-                                            <button className="btn btn-secondary px-2 py-1 text-xs">Reagendar</button>
+                                            <input type="date" name="service_date" defaultValue={date} className="input px-2 py-1.5 text-xs" />
+                                            <button className="btn btn-secondary px-3 py-1.5 text-xs">Reagendar</button>
                                         </form>
                                     </div>
                                 ))}
@@ -130,6 +130,7 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                 <RouteMap
                     stops={pool.map((d) => ({ latitude: d.latitude, longitude: d.longitude, label: d.reference }))}
                     height={560}
+                    mobileHeight={300}
                 />
             </div>
         </AppShell>

@@ -70,7 +70,7 @@ export default async function VehiculosPage({ searchParams }: { searchParams: Pr
                             </div>
                             <form action={deleteVehicle}>
                                 <input type="hidden" name="id" value={v.id} />
-                                <button className="btn btn-ghost px-2 py-1 text-xs text-alert">Eliminar</button>
+                                <button className="btn btn-ghost px-3 py-2 text-xs text-alert">Eliminar</button>
                             </form>
                         </div>
                     ))}

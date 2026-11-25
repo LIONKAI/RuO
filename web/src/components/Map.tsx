@@ -43,11 +43,14 @@ export function RouteMap({
     geometry,
     live,
     height = 340,
+    mobileHeight,
 }: {
     stops: MapStop[];
     geometry?: [number, number][] | null;
     live?: { latitude: number; longitude: number } | null;
     height?: number;
+    /** Altura en pantallas <1024px (por defecto ~55% del desktop). */
+    mobileHeight?: number;
 }) {
     const points: [number, number][] = [
         ...stops.map((s) => [s.latitude, s.longitude] as [number, number]),
@@ -56,7 +59,13 @@ export function RouteMap({
     ];
 
     return (
-        <div className="map-box" style={{ height }}>
+        <div
+            className="map-box map-h"
+            style={{
+                "--map-h": `${height}px`,
+                "--map-h-m": `${mobileHeight ?? Math.round(height * 0.55)}px`,
+            } as React.CSSProperties}
+        >
             <MapContainer center={points[0] ?? CENTER} zoom={13} style={{ height: "100%", width: "100%" }} scrollWheelZoom>
                 <TileLayer
                     attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
