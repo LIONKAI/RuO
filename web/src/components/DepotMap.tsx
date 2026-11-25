@@ -7,9 +7,9 @@ import "leaflet/dist/leaflet.css";
 
 const CENTER: [number, number] = [-17.7833, -63.1821]; // Santa Cruz
 
-const depotIcon = L.divIcon({
+const pinIcon = (label: string) => L.divIcon({
     className: "",
-    html: `<div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:#1e3a5f;border:2px solid #fff;color:#fff;font:700 13px 'Barlow Condensed',sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.4);">⌂</div>`,
+    html: `<div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:#1e3a5f;border:2px solid #fff;color:#fff;font:700 13px 'Barlow Condensed',sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.4);">${label}</div>`,
     iconSize: [26, 26],
     iconAnchor: [13, 13],
 });
@@ -32,9 +32,11 @@ function Recenter({ point }: { point: [number, number] | null }) {
 export default function DepotMap({
     point,
     onPick,
+    pinLabel = "⌂",
 }: {
     point: [number, number] | null;
     onPick: (lat: number, lng: number) => void;
+    pinLabel?: string;
 }) {
     return (
         <MapContainer center={point ?? CENTER} zoom={point ? 15 : 12} style={{ height: "100%", width: "100%" }} scrollWheelZoom>
@@ -47,7 +49,7 @@ export default function DepotMap({
             {point && (
                 <Marker
                     position={point}
-                    icon={depotIcon}
+                    icon={pinIcon(pinLabel)}
                     draggable
                     eventHandlers={{
                         dragend: (e) => {

@@ -16,11 +16,18 @@ const parse = (raw: string): number | null => {
 };
 
 /**
- * Selector de punto en mapa para la base/depósito. Escribe los inputs
- * `latitude`/`longitude` del formulario (los mismos que lee manualCoordinates).
- * El marcador también se puede arrastrar, y los inputs editan el punto a mano.
+ * Selector de punto en mapa. Escribe los inputs `latitude`/`longitude` del
+ * formulario (los mismos que lee manualCoordinates en el servidor). El
+ * marcador se fija con clic, se puede arrastrar, y los inputs editan el
+ * punto a mano en ambas direcciones.
  */
-export function DepotPicker() {
+export function MapPicker({
+    hint = "Toca el mapa para marcar el punto (o arrastra el marcador).",
+    pinLabel = "⌂",
+}: {
+    hint?: string;
+    pinLabel?: string;
+}) {
     const [lat, setLat] = useState("");
     const [lng, setLng] = useState("");
 
@@ -47,7 +54,7 @@ export function DepotPicker() {
                 className="map-box map-h"
                 style={{ "--map-h": "260px", "--map-h-m": "200px" } as React.CSSProperties}
             >
-                <DepotMap point={point} onPick={pick} />
+                <DepotMap point={point} onPick={pick} pinLabel={pinLabel} />
             </div>
             <div className="flex items-end gap-2">
                 <div className="flex-1">
@@ -80,9 +87,7 @@ export function DepotPicker() {
                     </button>
                 )}
             </div>
-            <p className="text-[11px] text-neutral-500">
-                Toca el mapa para marcar la base (o arrastra el marcador). Si lo dejas vacío, se busca por dirección.
-            </p>
+            <p className="text-[11px] text-neutral-500">{hint}</p>
         </div>
     );
 }

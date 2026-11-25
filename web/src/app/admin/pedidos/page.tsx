@@ -6,6 +6,7 @@ import { poolFor, failedFor, trackingUrl } from "@/lib/queries";
 import { trackingLink } from "@/lib/services/whatsapp";
 import { todayIso, isIsoDate } from "@/lib/domain";
 import { RouteMap } from "@/components/MapLoader";
+import { MapPicker } from "@/components/MapPicker";
 
 export const instant = false;
 
@@ -63,13 +64,9 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                                 <label className="label">Teléfono (WhatsApp)</label>
                                 <input name="phone" className="input" placeholder="70012345" />
                             </div>
-                            <div>
-                                <label className="label">Latitud <span className="text-neutral-400 normal-case">(opcional)</span></label>
-                                <input name="latitude" type="number" step="any" className="input" placeholder="-17.78" />
-                            </div>
-                            <div>
-                                <label className="label">Longitud <span className="text-neutral-400 normal-case">(opcional)</span></label>
-                                <input name="longitude" type="number" step="any" className="input" placeholder="-63.18" />
+                            <div className="sm:col-span-2">
+                                <label className="label">Ubicación exacta <span className="text-neutral-400 normal-case">(opcional — si no, se busca por dirección)</span></label>
+                                <MapPicker pinLabel="●" hint="Toca el mapa donde es la entrega. Ideal para direcciones que el buscador no encuentra." />
                             </div>
                             <button className="btn btn-primary sm:col-span-2">+ Agregar al pool</button>
                         </form>

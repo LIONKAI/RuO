@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { vehicles, profiles } from "@/db/schema";
 import { requireAdmin } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
-import { DepotPicker } from "@/components/DepotPicker";
+import { MapPicker } from "@/components/MapPicker";
 import { createVehicle, deleteVehicle } from "../actions";
 import { UserRole } from "@/lib/domain";
 
@@ -69,7 +69,7 @@ export default async function VehiculosPage({ searchParams }: { searchParams: Pr
                         </div>
                         <div>
                             <label className="label">Ubicación de la base <span className="text-neutral-400 normal-case">(opcional)</span></label>
-                            <DepotPicker />
+                            <MapPicker hint="Toca el mapa para marcar la base (o arrastra el marcador). Si lo dejas vacío, se busca por dirección." />
                         </div>
                         <button className="btn btn-primary">+ Registrar vehículo</button>
                     </form>
