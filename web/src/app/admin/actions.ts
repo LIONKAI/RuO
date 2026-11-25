@@ -184,7 +184,7 @@ export async function createVehicle(formData: FormData) {
         let depot: { latitude: number; longitude: number } | null = manualCoordinates(formData);
         if (!depot && depotAddress) {
             depot = await geocode(depotAddress);
-            if (!depot) throw new RoutingServiceError(`No se encontró el depósito «${depotAddress}». Pega las coordenadas manualmente (Google Maps → clic derecho → copiar).`);
+            if (!depot) throw new RoutingServiceError(`No se encontró el depósito «${depotAddress}». Márcalo tocando el mapa.`);
         }
 
         let driverId: string | null = null;

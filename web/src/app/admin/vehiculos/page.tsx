@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { vehicles, profiles } from "@/db/schema";
 import { currentUser } from "@/lib/supabase";
 import { AppShell } from "@/components/AppShell";
+import { DepotPicker } from "@/components/DepotPicker";
 import { createVehicle, deleteVehicle } from "../actions";
 import { UserRole } from "@/lib/domain";
 
@@ -68,15 +69,9 @@ export default async function VehiculosPage({ searchParams }: { searchParams: Pr
                             <label className="label">Base / depósito <span className="text-neutral-400 normal-case">(dirección, opcional)</span></label>
                             <input name="depot_address" className="input" placeholder="Av. Santos Dumont km 4, Santa Cruz" />
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="label">Latitud base <span className="text-neutral-400 normal-case">(opcional)</span></label>
-                                <input name="latitude" type="number" step="any" className="input" placeholder="-17.78" />
-                            </div>
-                            <div>
-                                <label className="label">Longitud base <span className="text-neutral-400 normal-case">(opcional)</span></label>
-                                <input name="longitude" type="number" step="any" className="input" placeholder="-63.18" />
-                            </div>
+                        <div>
+                            <label className="label">Ubicación de la base <span className="text-neutral-400 normal-case">(opcional)</span></label>
+                            <DepotPicker />
                         </div>
                         <button className="btn btn-primary">+ Registrar vehículo</button>
                     </form>
