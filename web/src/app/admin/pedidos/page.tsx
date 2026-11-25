@@ -5,8 +5,7 @@ import { createDestination, deleteDestination, distribute, requeueDestination } 
 import { poolFor, failedFor, trackingUrl } from "@/lib/queries";
 import { trackingLink } from "@/lib/services/whatsapp";
 import { todayIso, isIsoDate } from "@/lib/domain";
-import { RouteMap } from "@/components/MapLoader";
-import { MapPicker } from "@/components/MapPicker";
+import { PoolPicker } from "@/components/PoolPicker";
 
 export const instant = false;
 
@@ -50,7 +49,7 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                 <div className="flex flex-col gap-4">
                     <div className="corners corners-accent border border-neutral-200 bg-white p-5">
                         <h2 className="mb-4 font-display text-lg font-bold uppercase">Cargar pedido</h2>
-                        <form action={createDestination} className="grid gap-3 sm:grid-cols-2">
+                        <form id="np-form" action={createDestination} className="grid gap-3 sm:grid-cols-2">
                             <input type="hidden" name="date" value={date} />
                             <div className="sm:col-span-2">
                                 <label className="label">Dirección</label>
@@ -64,10 +63,9 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                                 <label className="label">Teléfono (WhatsApp)</label>
                                 <input name="phone" className="input" placeholder="70012345" />
                             </div>
-                            <div className="sm:col-span-2">
-                                <label className="label">Ubicación exacta <span className="text-neutral-400 normal-case">(opcional — si no, se busca por dirección)</span></label>
-                                <MapPicker pinLabel="●" hint="Toca el mapa donde es la entrega. Ideal para direcciones que el buscador no encuentra." />
-                            </div>
+                            <p className="text-[11px] text-neutral-500 sm:col-span-2">
+                                Ubicación exacta (opcional): toca el mapa de la derecha donde es la entrega. Si no marcas nada, se busca por dirección.
+                            </p>
                             <button className="btn btn-primary sm:col-span-2">+ Agregar al pool</button>
                         </form>
                     </div>
@@ -121,10 +119,9 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                     )}
                 </div>
 
-                <RouteMap
+                <PoolPicker
+                    formId="np-form"
                     stops={pool.map((d) => ({ latitude: d.latitude, longitude: d.longitude, label: d.reference }))}
-                    height={560}
-                    mobileHeight={300}
                 />
             </div>
         </AppShell>

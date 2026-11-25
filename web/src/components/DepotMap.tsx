@@ -7,12 +7,14 @@ import "leaflet/dist/leaflet.css";
 
 const CENTER: [number, number] = [-17.7833, -63.1821]; // Santa Cruz
 
-const pinIcon = (label: string) => L.divIcon({
+const pinIcon = (label: string, bg = "#1e3a5f") => L.divIcon({
     className: "",
-    html: `<div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:#1e3a5f;border:2px solid #fff;color:#fff;font:700 13px 'Barlow Condensed',sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.4);">${label}</div>`,
+    html: `<div style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;background:${bg};border:2px solid #fff;color:#fff;font:700 13px 'Barlow Condensed',sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.4);">${label}</div>`,
     iconSize: [26, 26],
     iconAnchor: [13, 13],
 });
+
+export type MapStop = { latitude: number; longitude: number; label: string };
 
 function ClickHandler({ onPick }: { onPick: (lat: number, lng: number) => void }) {
     useMapEvents({
@@ -33,10 +35,12 @@ export default function DepotMap({
     point,
     onPick,
     pinLabel = "⌂",
+    stops = [],
 }: {
     point: [number, number] | null;
     onPick: (lat: number, lng: number) => void;
     pinLabel?: string;
+    stops?: MapStop[];
 }) {
     return (
         <MapContainer center={point ?? CENTER} zoom={point ? 15 : 12} style={{ height: "100%", width: "100%" }} scrollWheelZoom>
@@ -46,6 +50,9 @@ export default function DepotMap({
             />
             <ClickHandler onPick={onPick} />
             <Recenter point={point} />
+            {stops.map((s, i) => (
+                <Marker key={`${s.latitude}-${s.longitude}-${i}`} position={[s.latitude, s.longitude]} icon={pinIcon(String(i + 1), "#8a8a8a")} />
+            ))}
             {point && (
                 <Marker
                     position={point}
