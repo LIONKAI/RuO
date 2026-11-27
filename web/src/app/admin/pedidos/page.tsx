@@ -65,6 +65,10 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                                 <label className="label">Teléfono (WhatsApp)</label>
                                 <input name="phone" className="input" placeholder="70012345" />
                             </div>
+                            <div>
+                                <label className="label">Cobrar al entregar (Bs) <span className="text-neutral-400 normal-case">(opcional)</span></label>
+                                <input name="amount" type="number" min="0" step="0.01" className="input" placeholder="0.00" />
+                            </div>
                             <p className="text-[11px] text-neutral-500 sm:col-span-2">
                                 Ubicación exacta (opcional): toca el mapa de la derecha donde es la entrega. Si no marcas nada, se busca por dirección.
                             </p>

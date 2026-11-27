@@ -181,13 +181,17 @@ export async function maybeCloseWorkday(workday: Workday): Promise<void> {
 }
 
 /** ETA estimado de un destino: ahora + suma de duraciones de tramos pendientes hasta él. */
+/** Minutos que el chofer pasa en cada parada (estacionar, entregar, firmar). */
+const SERVICE_MINUTES_PER_STOP = 5;
+
 export function etaFor(ordered: Destination[], target: Destination): number | null {
     if (target.status !== DestinationStatus.Pending) return null;
     const pos = target.position ?? ordered.length;
-    const seconds = ordered
-        .filter((d) => d.status === DestinationStatus.Pending && (d.position ?? 0) <= pos)
-        .reduce((sum, d) => sum + (d.legDurationSeconds ?? 0), 0);
-    return Date.now() + seconds * 1000;
+    const ahead = ordered.filter((d) => d.status === DestinationStatus.Pending && (d.position ?? 0) <= pos);
+    const driving = ahead.reduce((sum, d) => sum + (d.legDurationSeconds ?? 0), 0);
+    // Servicio en las paradas previas; en la propia no cuenta porque la ETA es la llegada.
+    const service = Math.max(0, ahead.length - 1) * SERVICE_MINUTES_PER_STOP * 60;
+    return Date.now() + (driving + service) * 1000;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

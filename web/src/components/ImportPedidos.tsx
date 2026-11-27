@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import readXlsxFile from "read-excel-file";
 
-type Row = { address: string; reference: string; phone: string | null; latitude: number | null; longitude: number | null };
+type Row = { address: string; reference: string; phone: string | null; latitude: number | null; longitude: number | null; amount: number | null };
 
 type Fase =
     | { paso: "inicial" }
@@ -23,6 +23,7 @@ function columnIndexes(header: string[]) {
         phone: find("telefono", "phone", "celular", "cel", "whatsapp"),
         lat: find("latitud", "lat"),
         lng: find("longitud", "lng", "lon"),
+        amount: find("monto", "cobrar", "total", "importe"),
     };
 }
 
@@ -70,6 +71,7 @@ function rowsFromMatrix(matrix: unknown[][]): Row[] {
             phone: get(idx.phone) || null,
             latitude: Number.isFinite(lat) && get(idx.lat) !== "" && Math.abs(lat) <= 90 ? lat : null,
             longitude: Number.isFinite(lng) && get(idx.lng) !== "" && Math.abs(lng) <= 180 ? lng : null,
+            amount: Number.isFinite(Number(get(idx.amount).replace(",", "."))) && Number(get(idx.amount).replace(",", ".")) > 0 ? Number(get(idx.amount).replace(",", ".")) : null,
         });
     }
     return out.slice(0, 200);
@@ -159,7 +161,7 @@ export function ImportPedidos({ action, date }: { action: (formData: FormData) =
             </div>
 
             <p className="mt-1 text-xs text-neutral-500">
-                Columnas: <b>dirección</b> (obligatoria), referencia/cliente, teléfono, latitud, longitud (estas dos últimas opcionales — si faltan se ubican solas).
+                Columnas: <b>dirección</b> (obligatoria), referencia/cliente, teléfono, monto a cobrar, latitud, longitud (las últimas opcionales — si faltan coordenadas se ubican solas).
             </p>
 
             {fase.paso !== "preview" && fase.paso !== "geocodificando" && (

@@ -44,7 +44,7 @@ function SubmitButton({ className, children }: { className: string; children: Re
  * Formulario de prueba de entrega: foto, firma en canvas, receptor, nota y GPS.
  * Captura la posición del chofer al abrir el formulario.
  */
-export function PodForm({ destinationId, workdayId }: { destinationId: number; workdayId: number }) {
+export function PodForm({ destinationId, workdayId, amountToCollect = null }: { destinationId: number; workdayId: number; amountToCollect?: number | null }) {
     const [open, setOpen] = useState<"complete" | "fail" | null>(null);
     const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -136,6 +136,20 @@ export function PodForm({ destinationId, workdayId }: { destinationId: number; w
                         <label className="label">Foto de entrega</label>
                         <input name="photo" type="file" accept="image/*" capture="environment" className="input py-1.5 text-xs" />
                     </div>
+                    {amountToCollect != null && amountToCollect > 0 && (
+                        <div className="border border-ruo-200 bg-white p-3">
+                            <label className="label">Cobranza · Bs {amountToCollect.toFixed(2)}</label>
+                            <div className="flex flex-wrap items-center gap-3 text-sm">
+                                <label className="flex items-center gap-1"><input type="radio" name="collection_status" value="collected" required /> Cobrado</label>
+                                <label className="flex items-center gap-1"><input type="radio" name="collection_status" value="not_collected" required /> No cobrado</label>
+                                <select name="payment_method" className="input w-auto px-2 py-1 text-xs" defaultValue="efectivo">
+                                    <option value="efectivo">Efectivo</option>
+                                    <option value="qr">QR</option>
+                                    <option value="transferencia">Transferencia</option>
+                                </select>
+                            </div>
+                        </div>
+                    )}
                     <div>
                         <label className="label">Recibió</label>
                         <input name="recipient_name" maxLength={120} className="input" placeholder="Nombre de quien recibe" />

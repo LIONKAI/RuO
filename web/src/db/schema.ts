@@ -10,6 +10,7 @@ export const companies = pgTable('companies', {
     maxVehicles: integer('max_vehicles').notNull().default(5),
     monthlyPrice: numeric('monthly_price', { precision: 8, scale: 2 }).notNull().default('300'),
     notes: text('notes'),
+    notifyWebhookUrl: text('notify_webhook_url'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -82,6 +83,9 @@ export const destinations = pgTable(
         failedAt: timestamp('failed_at', { withTimezone: true }),
         serviceDate: date('service_date').notNull(),
         publicToken: uuid('public_token').notNull().unique().defaultRandom(),
+        amountToCollect: numeric('amount_to_collect', { precision: 10, scale: 2 }),
+        collectionStatus: text('collection_status', { enum: ['collected', 'not_collected'] }),
+        paymentMethod: text('payment_method', { enum: ['efectivo', 'qr', 'transferencia'] }),
         recipientName: text('recipient_name'),
         podNote: text('pod_note'),
         podPhotoPath: text('pod_photo_path'),

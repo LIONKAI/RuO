@@ -20,6 +20,17 @@ async function regenerateKey() {
     redirect(`${back}?ok=${encodeURIComponent("Clave regenerada. Actualiza el bot de WhatsApp con la nueva.")}`);
 }
 
+async function saveWebhook(formData: FormData) {
+    "use server";
+    const { companyId } = await requireAdmin();
+    const url = String(formData.get("webhook_url") ?? "").trim().slice(0, 300);
+    if (url && !/^https:\/\/.+/.test(url)) redirect(`${back}?error=${encodeURIComponent("La URL del webhook debe empezar con https://")}`);
+
+    await db.update(companies).set({ notifyWebhookUrl: url || null, updatedAt: new Date() }).where(eq(companies.id, companyId));
+    revalidatePath(back);
+    redirect(`${back}?ok=${encodeURIComponent(url ? "Notificaciones automáticas activadas." : "Webhook eliminado.")}`);
+}
+
 export default async function ConfigPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
     await connection();
     const { user, companyId } = await requireAdmin();
@@ -50,6 +61,28 @@ export default async function ConfigPage({ searchParams }: { searchParams: Promi
                     <form action={regenerateKey}>
                         <button className="btn btn-ghost px-3 py-2 text-xs text-alert">Regenerar clave (invalida la actual)</button>
                     </form>
+                </div>
+
+                <div className="corners border border-neutral-200 bg-white p-5">
+                    <h2 className="mb-1 font-display text-lg font-bold uppercase">Notificaciones WhatsApp automáticas</h2>
+                    <p className="mb-3 text-xs text-neutral-500">
+                        Pega la URL de tu webhook de n8n. RuO le enviará un evento cuando un pedido <b>sale en ruta</b>,
+                        se <b>entrega</b> o <b>falla</b> — n8n lo convierte en el mensaje de WhatsApp al cliente, con su link de seguimiento.
+                    </p>
+                    <form action={saveWebhook} className="flex flex-col gap-2">
+                        <input
+                            name="webhook_url"
+                            defaultValue={company?.notifyWebhookUrl ?? ""}
+                            className="input text-xs"
+                            placeholder="https://tu-n8n.com/webhook/ruo-notificaciones"
+                        />
+                        <div className="flex gap-2">
+                            <button className="btn btn-primary px-4 py-2 text-xs">Guardar webhook</button>
+                        </div>
+                    </form>
+                    {company?.notifyWebhookUrl
+                        ? <p className="mt-2 text-xs text-done">✓ Activo — los clientes reciben aviso automático.</p>
+                        : <p className="mt-2 text-xs text-neutral-400">Sin configurar — los avisos se envían manual desde Pedidos.</p>}
                 </div>
             </div>
         </AppShell>

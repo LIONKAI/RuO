@@ -70,6 +70,9 @@ export default async function DriverPage({ searchParams }: { searchParams: Promi
                                             <div>
                                                 <p className="text-sm font-semibold">{d.reference}</p>
                                                 <p className="text-xs text-neutral-500">{d.address}{d.phone ? ` · 📞 ${d.phone}` : ""}</p>
+                                                {d.amountToCollect && Number(d.amountToCollect) > 0 && (
+                                                    <p className="mt-0.5 text-xs font-bold text-ruo-700">Cobrar Bs {Number(d.amountToCollect).toFixed(2)}</p>
+                                                )}
                                             </div>
                                         </div>
                                         <span className={`tag ${tagOf(d.status)}`}>{d.status === DestinationStatus.Completed ? "Entregado" : d.status === DestinationStatus.Failed ? "Fallido" : eta ? `ETA ${formatTime(eta)}` : "Pendiente"}</span>
@@ -88,7 +91,7 @@ export default async function DriverPage({ searchParams }: { searchParams: Promi
                                         </details>
                                     )}
                                     {d.id === active?.id && workday.status === WorkdayStatus.InProgress && (
-                                        <PodForm destinationId={d.id} workdayId={workday.id} />
+                                        <PodForm destinationId={d.id} workdayId={workday.id} amountToCollect={d.amountToCollect ? Number(d.amountToCollect) : null} />
                                     )}
                                     {d.status === DestinationStatus.Failed && d.failureReason && (
                                         <p className="text-xs text-alert">Motivo: {d.failureReason}</p>

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { vehicles, workdays } from "@/db/schema";
 import { Logo } from "@/components/Logo";
+import { AutoRefresh } from "@/components/AutoRefresh";
 import { RouteMap } from "@/components/MapLoader";
 import { destinationByToken, destinationsOf, etaFor } from "@/lib/queries";
 import { DestinationStatus, formatDateTime, formatTime } from "@/lib/domain";
@@ -83,7 +84,8 @@ export default async function TrackingPage({ params }: { params: Promise<{ token
                     mobileHeight={260}
                 />
 
-                <p className="mt-6 text-center text-xs text-neutral-400">Recarga la página para actualizar la posición.</p>
+                <p className="mt-6 text-center text-xs text-neutral-400">Se actualiza solo cada 30 segundos.</p>
+                {dest.status === DestinationStatus.Pending && <AutoRefresh seconds={30} />}
             </main>
         </div>
     );

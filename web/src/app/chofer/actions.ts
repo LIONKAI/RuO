@@ -6,6 +6,7 @@ import { redirect } from 'next/navigation';
 import { db } from '@/db';
 import { destinations, workdays } from '@/db/schema';
 import { pushToAdmins } from '@/lib/push';
+import { notifyCompany, payloadFor } from '@/lib/notify';
 import type { Workday } from '@/db/schema';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireDriver } from '@/lib/auth';
@@ -26,7 +27,7 @@ const toRoute = (key: 'ok' | 'error', message: string) => `/chofer?${key}=${enco
  * ella: su vehículo, jornada en curso, parada pendiente y en el orden de la ruta.
  * Port de DestinationPolicy::complete. Redirige con el motivo si no puede.
  */
-async function authorizeStop(formData: FormData): Promise<{ destinationId: number; workday: Workday; reference: string }> {
+async function authorizeStop(formData: FormData): Promise<{ destinationId: number; workday: Workday; reference: string; dest: typeof destinations.$inferSelect }> {
     const { vehicle } = await requireDriver();
     const destinationId = formId(formData, 'id');
 
@@ -41,7 +42,7 @@ async function authorizeStop(formData: FormData): Promise<{ destinationId: numbe
     const denied = driverStopError(vehicle?.id ?? null, workday ?? null, stops, destinationId ?? 0);
     if (denied || !destinationId || !workday) redirect(toRoute('error', denied ?? 'Parada no encontrada.'));
 
-    return { destinationId, workday, reference: destination?.reference ?? '' };
+    return { destinationId, workday, reference: destination?.reference ?? '', dest: destination! };
 }
 
 async function uploadPod(file: File, destinationId: number, kind: 'photo' | 'signature'): Promise<string> {
@@ -77,7 +78,7 @@ async function afterStopClosed(workday: Workday, done: string): Promise<string> 
 }
 
 export async function completeDestination(formData: FormData) {
-    const { destinationId, workday, reference } = await authorizeStop(formData);
+    const { destinationId, workday, reference, dest } = await authorizeStop(formData);
 
     const recipient = String(formData.get('recipient_name') ?? '').trim().slice(0, 120) || null;
     const note = String(formData.get('pod_note') ?? '').trim().slice(0, 500) || null;
@@ -89,11 +90,18 @@ export async function completeDestination(formData: FormData) {
 
     let target: string;
     try {
+        const collectionRaw = String(formData.get('collection_status') ?? '');
+        const collectionStatus = collectionRaw === 'collected' || collectionRaw === 'not_collected' ? collectionRaw : null;
+        const methodRaw = String(formData.get('payment_method') ?? '');
+        const paymentMethod = collectionStatus === 'collected' && ['efectivo', 'qr', 'transferencia'].includes(methodRaw) ? methodRaw as 'efectivo' | 'qr' | 'transferencia' : null;
+
         const patch: Partial<typeof destinations.$inferInsert> = {
             status: DestinationStatus.Completed,
             completedAt: new Date(),
             recipientName: recipient,
             podNote: note,
+            collectionStatus: collectionStatus as 'collected' | 'not_collected' | null,
+            paymentMethod,
             deliveredLatitude: hasPosition ? latitude : null,
             deliveredLongitude: hasPosition ? longitude : null,
             updatedAt: new Date(),
@@ -113,6 +121,9 @@ export async function completeDestination(formData: FormData) {
                 url: '/admin',
                 tag: `ruo-entrega-${destinationId}`,
             });
+            await notifyCompany(workday.companyId, [
+                payloadFor('entregado', '', dest, { recibio: recipient, cobrado: collectionStatus === 'collected' ? 'si' : null }),
+            ]);
         } catch (error) {
             console.error('[completeDestination/push]', error);
         }
@@ -128,7 +139,7 @@ export async function completeDestination(formData: FormData) {
 }
 
 export async function failDestination(formData: FormData) {
-    const { destinationId, workday, reference } = await authorizeStop(formData);
+    const { destinationId, workday, reference, dest } = await authorizeStop(formData);
 
     const reasonKey = String(formData.get('failure_reason') ?? '');
     if (!(reasonKey in failureReasons)) redirect(toRoute('error', 'Selecciona un motivo de falla.'));
@@ -151,6 +162,9 @@ export async function failDestination(formData: FormData) {
                 url: '/admin/pedidos',
                 tag: `ruo-falla-${destinationId}`,
             });
+            await notifyCompany(workday.companyId, [
+                payloadFor('fallido', '', dest, { motivo: failureReasons[reasonKey] }),
+            ]);
         } catch (error) {
             console.error('[failDestination/push]', error);
         }

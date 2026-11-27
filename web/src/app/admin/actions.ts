@@ -10,6 +10,7 @@ import { RoutingServiceError } from '@/lib/services/osrm';
 import { distributeFleet, optimizeWorkday, todayIso } from '@/lib/queries';
 import { requireAdmin } from '@/lib/auth';
 import { pushToProfile } from '@/lib/push';
+import { notifyCompany, payloadFor } from '@/lib/notify';
 import { formId, isUniqueViolation } from '@/lib/guards';
 import { DestinationStatus, UserRole, WorkdayStatus, isIsoDate } from '@/lib/domain';
 
@@ -60,7 +61,9 @@ export async function createDestination(formData: FormData) {
         if (!coords) {
             target = withMessage(back, 'error', `No se encontró «${address}» en el mapa. Sé más específico o pega coordenadas.`);
         } else {
-            await db.insert(destinations).values({ companyId, address, reference, phone, ...coords, serviceDate: date });
+            const amount = Number(formData.get('amount'));
+            const amountToCollect = Number.isFinite(amount) && amount > 0 ? String(Math.min(amount, 999999)) : null;
+            await db.insert(destinations).values({ companyId, address, reference, phone, amountToCollect, ...coords, serviceDate: date });
             revalidatePath('/admin/pedidos');
         }
     } catch (error) {
@@ -78,7 +81,7 @@ export async function importDestinations(formData: FormData) {
     const date = dateFrom(formData);
     const back = `/admin/pedidos?fecha=${date}`;
 
-    let rows: { address: string; reference: string; phone: string | null; latitude: number; longitude: number }[] = [];
+    let rows: { address: string; reference: string; phone: string | null; latitude: number; longitude: number; amount?: number | null }[] = [];
     try {
         const parsed = JSON.parse(String(formData.get('rows') ?? '[]'));
         if (Array.isArray(parsed)) rows = parsed.slice(0, 200);
@@ -106,6 +109,7 @@ export async function importDestinations(formData: FormData) {
                     phone: typeof r.phone === 'string' && r.phone.trim() ? r.phone.trim().slice(0, 30) : null,
                     latitude: r.latitude,
                     longitude: r.longitude,
+                    amountToCollect: typeof r.amount === 'number' && r.amount > 0 ? String(Math.min(r.amount, 999999)) : null,
                     serviceDate: date,
                 })),
             );
@@ -193,6 +197,12 @@ export async function distribute(formData: FormData) {
                         tag: `ruo-ruta-${date}`,
                     })),
             );
+            const asignados = await db.select().from(destinations)
+                .where(and(eq(destinations.companyId, companyId), eq(destinations.serviceDate, date), eq(destinations.status, DestinationStatus.Pending)));
+            const conTelefono = asignados.filter((d) => d.phone);
+            if (conTelefono.length > 0) {
+                await notifyCompany(companyId, conTelefono.map((d) => payloadFor('en_camino', '', d)));
+            }
         } catch (error) {
             console.error('[distribute/push]', error);
         }
