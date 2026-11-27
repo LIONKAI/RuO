@@ -6,6 +6,7 @@ import { vehicles } from "@/db/schema";
 import { currentUser } from "@/lib/supabase";
 import { AppShell } from "@/components/AppShell";
 import { PodForm } from "@/components/PodForm";
+import { SyncManager } from "@/components/SyncManager";
 import { GpsReporter } from "@/components/GpsReporter";
 import { RouteMap } from "@/components/MapLoader";
 import { destinationsOf, workdayFor, etaFor } from "@/lib/queries";
@@ -39,6 +40,7 @@ export default async function DriverPage({ searchParams }: { searchParams: Promi
 
     return (
         <AppShell user={user} section="chofer">
+            <SyncManager />
             <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
                 <div>
                     <p className="eyebrow text-ruo-600">{vehicle?.name ?? "Sin vehículo"} · {date}</p>
@@ -91,7 +93,7 @@ export default async function DriverPage({ searchParams }: { searchParams: Promi
                                         </details>
                                     )}
                                     {d.id === active?.id && workday.status === WorkdayStatus.InProgress && (
-                                        <PodForm destinationId={d.id} workdayId={workday.id} amountToCollect={d.amountToCollect ? Number(d.amountToCollect) : null} />
+                                        <PodForm destinationId={d.id} workdayId={workday.id} amountToCollect={d.amountToCollect ? Number(d.amountToCollect) : null} reference={d.reference} />
                                     )}
                                     {d.status === DestinationStatus.Failed && d.failureReason && (
                                         <p className="text-xs text-alert">Motivo: {d.failureReason}</p>

@@ -4,6 +4,8 @@ import { useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { completeDestination, failDestination } from "@/app/chofer/actions";
 import { failureReasons } from "@/lib/domain";
+import { queueDelivery } from "@/lib/offline-queue";
+import { useRouter } from "next/navigation";
 
 /** Lado mayor de la foto tras comprimir: una foto de celular (3–8 MB) queda en ~200–500 KB. */
 const PHOTO_MAX_SIDE = 1600;
@@ -44,7 +46,9 @@ function SubmitButton({ className, children }: { className: string; children: Re
  * Formulario de prueba de entrega: foto, firma en canvas, receptor, nota y GPS.
  * Captura la posición del chofer al abrir el formulario.
  */
-export function PodForm({ destinationId, workdayId, amountToCollect = null }: { destinationId: number; workdayId: number; amountToCollect?: number | null }) {
+export function PodForm({ destinationId, workdayId, amountToCollect = null, reference = "" }: { destinationId: number; workdayId: number; amountToCollect?: number | null; reference?: string }) {
+    const router = useRouter();
+    const [localPending, setLocalPending] = useState(false);
     const [open, setOpen] = useState<"complete" | "fail" | null>(null);
     const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -115,15 +119,63 @@ export function PodForm({ destinationId, workdayId, amountToCollect = null }: { 
             if (blob) formData.set("signature", new File([blob], "firma.png", { type: "image/png" }));
         }
 
-        await completeDestination(formData);
+        // Sin señal (o si el envío falla por red): guardar local y sincronizar después.
+        if (!navigator.onLine) {
+            await queueOffline(formData, "completar");
+            return;
+        }
+        try {
+            await completeDestination(formData);
+        } catch (error) {
+            // redirect() también llega aquí como excepción controlada de Next — se distingue
+            // porque las fallas de red son TypeError o errores sin digest de redirect.
+            if (error instanceof Error && "digest" in error) throw error;
+            await queueOffline(formData, "completar");
+        }
+    };
+
+    const queueOffline = async (formData: FormData, tipo: "completar" | "fallar") => {
+        const fields: Record<string, string> = {};
+        let photo: Blob | null = null;
+        let signature: Blob | null = null;
+        for (const [key, value] of formData.entries()) {
+            if (value instanceof File) {
+                if (key === "photo" && value.size > 0) photo = value;
+                if (key === "signature" && value.size > 0) signature = value;
+            } else if (key !== "id" && key !== "workday_id") {
+                fields[key] = value;
+            }
+        }
+        await queueDelivery({ tipo, destinationId, workdayId, referencia: reference, fields, photo, signature });
+        setLocalPending(true);
+        setTimeout(() => router.refresh(), 400);
+    };
+
+    const submitFailure = async (formData: FormData) => {
+        if (!navigator.onLine) {
+            await queueOffline(formData, "fallar");
+            return;
+        }
+        try {
+            await failDestination(formData);
+        } catch (error) {
+            if (error instanceof Error && "digest" in error) throw error;
+            await queueOffline(formData, "fallar");
+        }
     };
 
     return (
         <div className="flex flex-col gap-2">
-            <div className="flex gap-2">
-                <button type="button" onClick={() => locate("complete")} className="btn btn-success flex-1 px-4 py-3 text-sm">✓ Entregar</button>
-                <button type="button" onClick={() => locate("fail")} className="btn btn-alert flex-1 px-4 py-3 text-sm">✕ Falló</button>
-            </div>
+            {localPending ? (
+                <p className="border border-ruo-200 bg-ruo-50 px-3 py-2 text-xs text-ruo-700">
+                    ⏳ Guardada en el teléfono — se enviará sola cuando vuelva la señal.
+                </p>
+            ) : (
+                <div className="flex gap-2">
+                    <button type="button" onClick={() => locate("complete")} className="btn btn-success flex-1 px-4 py-3 text-sm">✓ Entregar</button>
+                    <button type="button" onClick={() => locate("fail")} className="btn btn-alert flex-1 px-4 py-3 text-sm">✕ Falló</button>
+                </div>
+            )}
 
             {open === "complete" && (
                 <form action={submitDelivery} className="flex flex-col gap-3 border border-done/30 bg-done-50/40 p-4">
@@ -179,7 +231,7 @@ export function PodForm({ destinationId, workdayId, amountToCollect = null }: { 
             )}
 
             {open === "fail" && (
-                <form action={failDestination} className="flex flex-col gap-3 border border-alert/30 bg-alert-50/40 p-4">
+                <form action={submitFailure} className="flex flex-col gap-3 border border-alert/30 bg-alert-50/40 p-4">
                     <input type="hidden" name="id" value={destinationId} />
                     <input type="hidden" name="workday_id" value={workdayId} />
                     <div>
