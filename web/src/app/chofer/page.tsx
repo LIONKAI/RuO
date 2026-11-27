@@ -75,6 +75,9 @@ export default async function DriverPage({ searchParams }: { searchParams: Promi
                                                 {d.amountToCollect && Number(d.amountToCollect) > 0 && (
                                                     <p className="mt-0.5 text-xs font-bold text-ruo-700">Cobrar Bs {Number(d.amountToCollect).toFixed(2)}</p>
                                                 )}
+                                                {d.windowStart && (
+                                                    <p className="mt-0.5 text-xs font-semibold text-neutral-600">🕐 Entregar {d.windowStart}{d.windowEnd ? `–${d.windowEnd}` : ""}</p>
+                                                )}
                                             </div>
                                         </div>
                                         <span className={`tag ${tagOf(d.status)}`}>{d.status === DestinationStatus.Completed ? "Entregado" : d.status === DestinationStatus.Failed ? "Fallido" : eta ? `ETA ${formatTime(eta)}` : "Pendiente"}</span>

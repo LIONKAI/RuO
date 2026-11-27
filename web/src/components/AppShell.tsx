@@ -17,6 +17,7 @@ const adminNav = [
     ["/admin/vehiculos", "Vehículos"],
     ["/admin/choferes", "Choferes"],
     ["/admin/resumen", "Resumen"],
+    ["/admin/reportes", "Reportes"],
     ["/admin/config", "Config"],
 ] as const;
 

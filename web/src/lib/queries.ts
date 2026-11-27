@@ -3,7 +3,7 @@ import { and, asc, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db';
 import { destinations, vehicles, workdays } from '@/db/schema';
 import { planRoute, RoutingServiceError, type PlannedStop } from '@/lib/services/osrm';
-import { splitPool } from '@/lib/services/fleet';
+import { rebalanceCapacities, splitPool } from '@/lib/services/fleet';
 import { withDbRetry } from '@/lib/retry';
 import { DestinationStatus, WorkdayStatus, todayIso, type Coordinates } from '@/lib/domain';
 import type { Destination, Vehicle, Workday } from '@/db/schema';
@@ -125,19 +125,27 @@ export async function optimizeWorkday(workday: Workday): Promise<void> {
  * Primero se calculan todas las rutas; solo si OSRM respondió para todas se
  * escriben juntas en una transacción (todo o nada).
  */
-export async function distributeFleet(date: string, companyId: string): Promise<{ assigned: number; routes: number }> {
+export async function distributeFleet(date: string, companyId: string): Promise<{ assigned: number; routes: number; leftover: number }> {
     const pool = await poolFor(date, companyId);
     if (pool.length === 0) throw new RoutingServiceError('No hay pedidos pendientes de repartir en esa fecha.');
 
     const fleet = await withDbRetry(() => db.select().from(vehicles).where(eq(vehicles.companyId, companyId)));
     if (fleet.length === 0) throw new RoutingServiceError('No hay vehículos disponibles para repartir.');
 
-    const groups = splitPool(pool, fleet.map((v) => ({
+    const fleetVehicles = fleet.map((v) => ({
         id: v.id,
         depot: v.depotLatitude != null && v.depotLongitude != null
             ? { latitude: v.depotLatitude, longitude: v.depotLongitude }
             : null,
-    })));
+        capacityUnits: v.capacityUnits,
+    }));
+    const rough = splitPool(pool, fleetVehicles);
+    const { groups, leftover } = rebalanceCapacities(rough, fleetVehicles, (d) => d.demandUnits);
+    // Los que no cupieron vuelven al pool: no se les asigna workday.
+    const leftoverIds = new Set(leftover.map((d) => d.id));
+    for (const [vehicleId, items] of groups) {
+        groups.set(vehicleId, items.filter((d) => !leftoverIds.has(d.id)));
+    }
 
     const byId = new Map(fleet.map((v) => [v.id, v]));
     const plans: { workday: Workday; plan: RoutePlan; assigned: number }[] = [];
@@ -158,6 +166,7 @@ export async function distributeFleet(date: string, companyId: string): Promise<
     return {
         assigned: plans.reduce((sum, p) => sum + p.assigned, 0),
         routes: plans.length,
+        leftover: leftover.length,
     };
 }
 

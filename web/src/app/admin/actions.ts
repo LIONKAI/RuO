@@ -63,7 +63,15 @@ export async function createDestination(formData: FormData) {
         } else {
             const amount = Number(formData.get('amount'));
             const amountToCollect = Number.isFinite(amount) && amount > 0 ? String(Math.min(amount, 999999)) : null;
-            await db.insert(destinations).values({ companyId, address, reference, phone, amountToCollect, ...coords, serviceDate: date });
+            const demandRaw = Number(formData.get('demand_units'));
+            const demandUnits = Number.isFinite(demandRaw) && demandRaw >= 1 ? Math.min(Math.round(demandRaw), 1000) : 1;
+            const hhmm = (v: FormDataEntryValue | null) => {
+                const str = String(v ?? '').trim();
+                return /^([01]\d|2[0-3]):[0-5]\d$/.test(str) ? str : null;
+            };
+            const windowStart = hhmm(formData.get('window_start'));
+            const windowEnd = hhmm(formData.get('window_end'));
+            await db.insert(destinations).values({ companyId, address, reference, phone, amountToCollect, demandUnits, windowStart, windowEnd, ...coords, serviceDate: date });
             revalidatePath('/admin/pedidos');
         }
     } catch (error) {
@@ -209,7 +217,8 @@ export async function distribute(formData: FormData) {
 
         revalidatePath('/admin');
         revalidatePath('/admin/pedidos');
-        target = withMessage(back, 'ok', `${result.assigned} pedidos repartidos en ${result.routes} rutas`);
+        const aviso = result.leftover > 0 ? `. ⚠ ${result.leftover} no cupieron en la capacidad de la flota y quedaron en el pool` : '';
+        target = withMessage(back, 'ok', `${result.assigned} pedidos repartidos en ${result.routes} rutas${aviso}`);
     } catch (error) {
         console.error('[distribute]', error);
         target = withMessage(back, 'error', messageOf(error, 'Error al repartir los pedidos.'));
@@ -265,6 +274,9 @@ export async function createVehicle(formData: FormData) {
             if (!depot) throw new RoutingServiceError(`No se encontró el depósito «${depotAddress}». Márcalo tocando el mapa.`);
         }
 
+        const capacityRaw = Number(formData.get('capacity_units'));
+        const capacityUnits = Number.isFinite(capacityRaw) && capacityRaw > 0 ? Math.min(Math.round(capacityRaw), 10000) : null;
+
         let driverId: string | null = null;
         const driverIdRaw = text(formData, 'driver_id', 40) || null;
         if (driverIdRaw) {
@@ -277,6 +289,7 @@ export async function createVehicle(formData: FormData) {
         await db.insert(vehicles).values({
             companyId,
             name,
+            capacityUnits,
             plate,
             fuelLitersPerKm: String(Number.isFinite(fuel) && fuel > 0 && fuel < 10 ? fuel : 0.1),
             driverId,

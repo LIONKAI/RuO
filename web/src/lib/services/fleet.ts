@@ -22,6 +22,8 @@ export function haversine(a: [number, number], b: [number, number]): number {
 export interface FleetVehicle {
     id: number;
     depot: Coordinates | null;
+    /** Capacidad máxima en unidades de carga; null = sin límite. */
+    capacityUnits?: number | null;
 }
 
 interface Cluster<T> {
@@ -136,4 +138,73 @@ export function splitPool<T extends Coordinates>(pool: T[], vehicles: FleetVehic
         });
 
     return groups;
+}
+
+/**
+ * Reparto con capacidad: mueve pedidos fuera de los vehículos excedidos y los
+ * reubica en el vehículo con espacio más cercano. Lo que no cabe en ninguna
+ * parte se queda en el pool (leftover) — el admin lo ve y decide.
+ * Heurística greedy: k-means no entiende capacidades, así que este post-paso
+ * sacrifica un poco de geografía por respetar el límite duro de carga.
+ */
+export function rebalanceCapacities<T extends Coordinates>(
+    groups: Map<number, T[]>,
+    vehicles: FleetVehicle[],
+    demandOf: (item: T) => number,
+): { groups: Map<number, T[]>; leftover: T[] } {
+    const loadOf = (items: T[]) => items.reduce((sum, item) => sum + demandOf(item), 0);
+    const result = new Map<number, T[]>();
+    const overflow: T[] = [];
+
+    // 1. Sacar el exceso: primero los pedidos más lejanos al depósito del vehículo.
+    for (const [vehicleId, items] of groups) {
+        const vehicle = vehicles.find((v) => v.id === vehicleId);
+        const capacity = vehicle?.capacityUnits ?? null;
+        if (capacity == null || loadOf(items) <= capacity) {
+            result.set(vehicleId, items);
+            continue;
+        }
+        const depot = vehicle?.depot;
+        const byDistance = [...items].sort((a, b) =>
+            depot ? haversine([b.latitude, b.longitude], [depot.latitude, depot.longitude]) - haversine([a.latitude, a.longitude], [depot.latitude, depot.longitude]) : 0);
+        const kept: T[] = [];
+        let load = 0;
+        // Se conservan los más cercanos que quepan; el resto desborda.
+        for (const item of [...byDistance].reverse()) {
+            if (load + demandOf(item) <= capacity) {
+                kept.push(item);
+                load += demandOf(item);
+            } else {
+                overflow.push(item);
+            }
+        }
+        result.set(vehicleId, kept);
+    }
+
+    // 2. Reubicar el overflow en el vehículo con espacio más cercano al pedido.
+    const leftover: T[] = [];
+    for (const item of overflow) {
+        const demand = demandOf(item);
+        let bestVehicle: number | null = null;
+        let bestDistance = Number.MAX_VALUE;
+        for (const vehicle of vehicles) {
+            const capacity = vehicle.capacityUnits ?? null;
+            const current = result.get(vehicle.id) ?? [];
+            if (capacity != null && loadOf(current) + demand > capacity) continue;
+            const distance = vehicle.depot
+                ? haversine([item.latitude, item.longitude], [vehicle.depot.latitude, vehicle.depot.longitude])
+                : Number.MAX_VALUE / 2;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestVehicle = vehicle.id;
+            }
+        }
+        if (bestVehicle === null) {
+            leftover.push(item);
+        } else {
+            result.set(bestVehicle, [...(result.get(bestVehicle) ?? []), item]);
+        }
+    }
+
+    return { groups: result, leftover };
 }

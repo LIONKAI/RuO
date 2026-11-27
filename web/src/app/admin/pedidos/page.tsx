@@ -69,6 +69,18 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                                 <label className="label">Cobrar al entregar (Bs) <span className="text-neutral-400 normal-case">(opcional)</span></label>
                                 <input name="amount" type="number" min="0" step="0.01" className="input" placeholder="0.00" />
                             </div>
+                            <div>
+                                <label className="label">Unidades de carga</label>
+                                <input name="demand_units" type="number" min="1" max="1000" defaultValue="1" className="input" />
+                            </div>
+                            <div>
+                                <label className="label">Ventana de entrega <span className="text-neutral-400 normal-case">(opcional)</span></label>
+                                <div className="flex items-center gap-1">
+                                    <input name="window_start" type="time" className="input px-2" />
+                                    <span className="text-xs text-neutral-400">a</span>
+                                    <input name="window_end" type="time" className="input px-2" />
+                                </div>
+                            </div>
                             <p className="text-[11px] text-neutral-500 sm:col-span-2">
                                 Ubicación exacta (opcional): toca el mapa de la derecha donde es la entrega. Si no marcas nada, se busca por dirección.
                             </p>

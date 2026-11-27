@@ -49,6 +49,10 @@ export default async function VehiculosPage({ searchParams }: { searchParams: Pr
                             <label className="label">Consumo (L/km)</label>
                             <input name="fuel_liters_per_km" type="number" step="0.001" defaultValue="0.10" className="input" />
                         </div>
+                            <div>
+                                <label className="label">Capacidad (unidades) <span className="text-neutral-400 normal-case">(vacío = sin límite)</span></label>
+                                <input name="capacity_units" type="number" min="1" max="10000" className="input" placeholder="Ej. 20" />
+                            </div>
                         <div>
                             <label className="label">Chofer <span className="text-neutral-400 normal-case">(opcional)</span></label>
                             <select name="driver_id" className="input">

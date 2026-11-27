@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { haversine, splitPool } from '../fleet';
+import { haversine, rebalanceCapacities, splitPool } from '../fleet';
 import { instruction } from '../directions';
 import { trackingLink, deliveredLink } from '../whatsapp';
 
@@ -81,5 +81,52 @@ describe('whatsapp links', () => {
 
     it('conserva prefijo internacional existente', () => {
         expect(deliveredLink({ phone: '+591 70012345', reference: 'P' })).toContain('wa.me/59170012345');
+    });
+});
+
+describe('rebalanceCapacities', () => {
+    const depot = { latitude: -17.78, longitude: -63.18 };
+    const cerca = (n: number) => Array.from({ length: n }, (_, i) => ({ latitude: -17.78 + i * 0.001, longitude: -63.18, demandUnits: 1 }));
+    const lejos = { latitude: -17.6, longitude: -63.0, demandUnits: 1 };
+
+    it('sin capacidad (null) no mueve nada', () => {
+        const items = cerca(10);
+        const groups = new Map([[1, items]]);
+        const { groups: out, leftover } = rebalanceCapacities(groups, [{ id: 1, depot, capacityUnits: null }], (d) => d.demandUnits);
+        expect(out.get(1)).toHaveLength(10);
+        expect(leftover).toHaveLength(0);
+    });
+
+    it('exceso se mueve a otro vehículo con espacio', () => {
+        const items = cerca(8);
+        const groups = new Map<number, typeof items>([[1, items], [2, []]]);
+        const { groups: out, leftover } = rebalanceCapacities(groups, [
+            { id: 1, depot, capacityUnits: 5 },
+            { id: 2, depot, capacityUnits: 5 },
+        ], (d) => d.demandUnits);
+        expect(out.get(1)).toHaveLength(5);
+        expect(out.get(2)).toHaveLength(3);
+        expect(leftover).toHaveLength(0);
+    });
+
+    it('lo que no cabe en ninguna parte queda en leftover', () => {
+        const items = cerca(8);
+        const groups = new Map<number, typeof items>([[1, items]]);
+        const { leftover } = rebalanceCapacities(groups, [
+            { id: 1, depot, capacityUnits: 5 },
+        ], (d) => d.demandUnits);
+        expect(leftover).toHaveLength(3);
+    });
+
+    it('respeta la demanda en unidades, no solo el conteo', () => {
+        const pesado = { ...cerca(1)[0], demandUnits: 4 };
+        const liviano = { ...cerca(1)[0], demandUnits: 1 };
+        const groups = new Map([[1, [pesado, liviano, liviano]]]);
+        const { groups: out, leftover } = rebalanceCapacities(groups, [
+            { id: 1, depot, capacityUnits: 5 },
+        ], (d) => d.demandUnits);
+        // 4+1+1 = 6 > 5: un liviano debe salir.
+        expect(out.get(1)!.reduce((s, d) => s + d.demandUnits, 0)).toBeLessThanOrEqual(5);
+        expect(leftover.length + (out.get(1)?.length ?? 0)).toBe(3);
     });
 });
