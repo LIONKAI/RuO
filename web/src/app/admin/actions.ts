@@ -1,14 +1,15 @@
 "use server";
 
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db } from '@/db';
-import { destinations, profiles, vehicles, workdays } from '@/db/schema';
+import { companies, destinations, profiles, vehicles, workdays } from '@/db/schema';
 import { geocode } from '@/lib/services/geocoder';
 import { RoutingServiceError } from '@/lib/services/osrm';
 import { distributeFleet, optimizeWorkday, todayIso } from '@/lib/queries';
 import { requireAdmin } from '@/lib/auth';
+import { pushToProfile } from '@/lib/push';
 import { formId, isUniqueViolation } from '@/lib/guards';
 import { DestinationStatus, UserRole, WorkdayStatus, isIsoDate } from '@/lib/domain';
 
@@ -70,6 +71,57 @@ export async function createDestination(formData: FormData) {
     redirect(target);
 }
 
+
+/** Importación masiva: el cliente geocodifica en el navegador y envía filas listas. */
+export async function importDestinations(formData: FormData) {
+    const { companyId } = await requireAdmin();
+    const date = dateFrom(formData);
+    const back = `/admin/pedidos?fecha=${date}`;
+
+    let rows: { address: string; reference: string; phone: string | null; latitude: number; longitude: number }[] = [];
+    try {
+        const parsed = JSON.parse(String(formData.get('rows') ?? '[]'));
+        if (Array.isArray(parsed)) rows = parsed.slice(0, 200);
+    } catch {
+        redirect(withMessage(back, 'error', 'El archivo no pudo leerse.'));
+    }
+
+    const valid = rows.filter((r) =>
+        typeof r.address === 'string' && r.address.trim().length > 2
+        && typeof r.reference === 'string' && r.reference.trim().length > 0
+        && Number.isFinite(r.latitude) && Number.isFinite(r.longitude)
+        && Math.abs(r.latitude) <= 90 && Math.abs(r.longitude) <= 180);
+
+    if (valid.length === 0) redirect(withMessage(back, 'error', 'Ninguna fila tenía datos válidos.'));
+
+    let target: string;
+    try {
+        // Inserción por lotes de 50 para no armar queries gigantes.
+        for (let i = 0; i < valid.length; i += 50) {
+            await db.insert(destinations).values(
+                valid.slice(i, i + 50).map((r) => ({
+                    companyId,
+                    address: r.address.trim().slice(0, 300),
+                    reference: r.reference.trim().slice(0, 120),
+                    phone: typeof r.phone === 'string' && r.phone.trim() ? r.phone.trim().slice(0, 30) : null,
+                    latitude: r.latitude,
+                    longitude: r.longitude,
+                    serviceDate: date,
+                })),
+            );
+        }
+        revalidatePath('/admin/pedidos');
+        const skipped = rows.length - valid.length;
+        const extra = skipped > 0 ? ` (${skipped} filas incompletas o sin coordenadas se omitieron)` : '';
+        target = withMessage(back, 'ok', `${valid.length} pedidos importados al pool.${extra}`);
+    } catch (error) {
+        console.error('[importDestinations]', error);
+        target = withMessage(back, 'error', 'Error al guardar la importación.');
+    }
+
+    redirect(target);
+}
+
 /** Elimina un pedido que sigue en el pool (los ya asignados a una ruta no se tocan). */
 export async function deleteDestination(formData: FormData) {
     const { companyId } = await requireAdmin();
@@ -122,6 +174,29 @@ export async function distribute(formData: FormData) {
     let target: string;
     try {
         const result = await distributeFleet(date, companyId);
+
+        try {
+            const perDriver = await db.select({
+                driverId: vehicles.driverId,
+                stops: sql<number>`count(${destinations.id})`,
+            }).from(workdays)
+                .innerJoin(vehicles, eq(vehicles.id, workdays.vehicleId))
+                .innerJoin(destinations, and(eq(destinations.workdayId, workdays.id), eq(destinations.status, DestinationStatus.Pending)))
+                .where(and(eq(workdays.companyId, companyId), eq(workdays.date, date)))
+                .groupBy(vehicles.driverId);
+            await Promise.allSettled(
+                perDriver.filter((r) => r.driverId).map((r) =>
+                    pushToProfile(r.driverId!, {
+                        title: 'Ruta del día lista',
+                        body: `Tienes ${r.stops} entregas asignadas para hoy.`,
+                        url: '/chofer',
+                        tag: `ruo-ruta-${date}`,
+                    })),
+            );
+        } catch (error) {
+            console.error('[distribute/push]', error);
+        }
+
         revalidatePath('/admin');
         revalidatePath('/admin/pedidos');
         target = withMessage(back, 'ok', `${result.assigned} pedidos repartidos en ${result.routes} rutas`);
@@ -168,6 +243,12 @@ export async function createVehicle(formData: FormData) {
 
     let target = back;
     try {
+        const [company] = await db.select().from(companies).where(eq(companies.id, companyId));
+        const [{ n: vehiculosActuales }] = await db.select({ n: sql<number>`count(*)` }).from(vehicles).where(eq(vehicles.companyId, companyId));
+        if (company && Number(vehiculosActuales) >= company.maxVehicles) {
+            throw new RoutingServiceError(`Tu plan ${company.plan} permite hasta ${company.maxVehicles} vehículos. Escríbenos para ampliarlo.`);
+        }
+
         let depot: { latitude: number; longitude: number } | null = manualCoordinates(formData);
         if (!depot && depotAddress) {
             depot = await geocode(depotAddress);

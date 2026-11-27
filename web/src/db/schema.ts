@@ -6,6 +6,10 @@ export const companies = pgTable('companies', {
     slug: text('slug').notNull().unique(),
     active: boolean('active').notNull().default(true),
     apiKey: text('api_key').notNull().unique(),
+    plan: text('plan', { enum: ['piloto', 'pro', 'enterprise'] }).notNull().default('piloto'),
+    maxVehicles: integer('max_vehicles').notNull().default(5),
+    monthlyPrice: numeric('monthly_price', { precision: 8, scale: 2 }).notNull().default('300'),
+    notes: text('notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -93,8 +97,19 @@ export const destinations = pgTable(
     ],
 );
 
+
+export const pushSubscriptions = pgTable('push_subscriptions', {
+    id: integer('id').primaryKey().generatedAlwaysAsIdentity(),
+    profileId: uuid('profile_id').notNull().references(() => profiles.id, { onDelete: 'cascade' }),
+    endpoint: text('endpoint').notNull().unique(),
+    p256dh: text('p256dh').notNull(),
+    auth: text('auth').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type Company = typeof companies.$inferSelect;
 export type Profile = typeof profiles.$inferSelect;
 export type Vehicle = typeof vehicles.$inferSelect;
 export type Workday = typeof workdays.$inferSelect;
 export type Destination = typeof destinations.$inferSelect;
+export type PushSubscription = typeof pushSubscriptions.$inferSelect;

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Barlow, Barlow_Condensed } from "next/font/google";
+import { SwRegistrar } from "@/components/SwRegistrar";
 import "./globals.css";
 
 const barlow = Barlow({
@@ -17,12 +18,21 @@ const barlowCondensed = Barlow_Condensed({
 export const viewport: Viewport = {
     width: "device-width",
     initialScale: 1,
+    themeColor: "#1e3a5f",
 };
 
 export const metadata: Metadata = {
     title: "RuO · Ruta Óptima",
     description:
         "El administrador carga los destinos del día y RuO genera la ruta más eficiente para cada vehículo. El chofer la sigue en tiempo real desde su teléfono.",
+    appleWebApp: {
+        capable: true,
+        title: "RuO",
+        statusBarStyle: "black-translucent",
+    },
+    icons: {
+        apple: "/icon-192.png",
+    },
 };
 
 export default function RootLayout({
@@ -32,7 +42,10 @@ export default function RootLayout({
 }>) {
     return (
         <html lang="es" className={`${barlow.variable} ${barlowCondensed.variable} h-full antialiased`}>
-            <body className="min-h-full bg-white font-sans text-neutral-900">{children}</body>
+            <body className="min-h-full bg-white font-sans text-neutral-900">
+                <SwRegistrar />
+                {children}
+            </body>
         </html>
     );
 }

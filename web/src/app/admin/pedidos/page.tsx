@@ -1,11 +1,12 @@
 import { connection } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { AppShell } from "@/components/AppShell";
-import { createDestination, deleteDestination, distribute, requeueDestination } from "../actions";
+import { createDestination, deleteDestination, distribute, importDestinations, requeueDestination } from "../actions";
 import { poolFor, failedFor, trackingUrl } from "@/lib/queries";
 import { trackingLink } from "@/lib/services/whatsapp";
 import { todayIso, isIsoDate } from "@/lib/domain";
 import { PoolPicker } from "@/components/PoolPicker";
+import { ImportPedidos } from "@/components/ImportPedidos";
 
 export const instant = false;
 
@@ -35,6 +36,7 @@ export default async function PedidosPage({ searchParams }: { searchParams: Prom
                         </div>
                         <button className="btn btn-secondary py-1.5">Ver</button>
                     </form>
+                    <ImportPedidos action={importDestinations} date={date} />
                     <form action={distribute}>
                         <input type="hidden" name="date" value={date} />
                         <button className="btn btn-primary py-1.5" disabled={pool.length === 0}>⇄ Repartir en flota ({pool.length})</button>

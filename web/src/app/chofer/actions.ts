@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db } from '@/db';
 import { destinations, workdays } from '@/db/schema';
+import { pushToAdmins } from '@/lib/push';
 import type { Workday } from '@/db/schema';
 import { supabaseAdmin } from '@/lib/supabase';
 import { requireDriver } from '@/lib/auth';
@@ -25,7 +26,7 @@ const toRoute = (key: 'ok' | 'error', message: string) => `/chofer?${key}=${enco
  * ella: su vehículo, jornada en curso, parada pendiente y en el orden de la ruta.
  * Port de DestinationPolicy::complete. Redirige con el motivo si no puede.
  */
-async function authorizeStop(formData: FormData): Promise<{ destinationId: number; workday: Workday }> {
+async function authorizeStop(formData: FormData): Promise<{ destinationId: number; workday: Workday; reference: string }> {
     const { vehicle } = await requireDriver();
     const destinationId = formId(formData, 'id');
 
@@ -40,7 +41,7 @@ async function authorizeStop(formData: FormData): Promise<{ destinationId: numbe
     const denied = driverStopError(vehicle?.id ?? null, workday ?? null, stops, destinationId ?? 0);
     if (denied || !destinationId || !workday) redirect(toRoute('error', denied ?? 'Parada no encontrada.'));
 
-    return { destinationId, workday };
+    return { destinationId, workday, reference: destination?.reference ?? '' };
 }
 
 async function uploadPod(file: File, destinationId: number, kind: 'photo' | 'signature'): Promise<string> {
@@ -76,7 +77,7 @@ async function afterStopClosed(workday: Workday, done: string): Promise<string> 
 }
 
 export async function completeDestination(formData: FormData) {
-    const { destinationId, workday } = await authorizeStop(formData);
+    const { destinationId, workday, reference } = await authorizeStop(formData);
 
     const recipient = String(formData.get('recipient_name') ?? '').trim().slice(0, 120) || null;
     const note = String(formData.get('pod_note') ?? '').trim().slice(0, 500) || null;
@@ -105,6 +106,17 @@ export async function completeDestination(formData: FormData) {
             .returning({ id: destinations.id });
         if (!updated.length) throw new DriverActionError('Este destino ya no está pendiente.');
 
+        try {
+            await pushToAdmins(workday.companyId, {
+                title: 'Entrega completada',
+                body: reference + (recipient ? ` · recibió ${recipient}` : ''),
+                url: '/admin',
+                tag: `ruo-entrega-${destinationId}`,
+            });
+        } catch (error) {
+            console.error('[completeDestination/push]', error);
+        }
+
         target = await afterStopClosed(workday, 'Entrega registrada');
     } catch (error) {
         console.error('[completeDestination]', error);
@@ -116,7 +128,7 @@ export async function completeDestination(formData: FormData) {
 }
 
 export async function failDestination(formData: FormData) {
-    const { destinationId, workday } = await authorizeStop(formData);
+    const { destinationId, workday, reference } = await authorizeStop(formData);
 
     const reasonKey = String(formData.get('failure_reason') ?? '');
     if (!(reasonKey in failureReasons)) redirect(toRoute('error', 'Selecciona un motivo de falla.'));
@@ -131,6 +143,17 @@ export async function failDestination(formData: FormData) {
         }).where(and(eq(destinations.id, destinationId), eq(destinations.status, DestinationStatus.Pending)))
             .returning({ id: destinations.id });
         if (!updated.length) throw new DriverActionError('Este destino ya no está pendiente.');
+
+        try {
+            await pushToAdmins(workday.companyId, {
+                title: 'Entrega fallida',
+                body: `${reference} · ${failureReasons[reasonKey]}`,
+                url: '/admin/pedidos',
+                tag: `ruo-falla-${destinationId}`,
+            });
+        } catch (error) {
+            console.error('[failDestination/push]', error);
+        }
 
         target = await afterStopClosed(workday, 'Parada marcada como fallida');
     } catch (error) {

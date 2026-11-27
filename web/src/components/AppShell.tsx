@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Logo } from "./Logo";
+import { PushSubscribe } from "./PushSubscribe";
 import { supabaseServer, type SessionUser } from "@/lib/supabase";
 
 async function logout() {
@@ -54,7 +55,19 @@ export function AppShell({ user, section, children }: { user: SessionUser; secti
                     </nav>
                 )}
             </header>
-            <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:py-8">{children}</main>
+            <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-5 sm:py-8">
+                {section !== "plataforma" && (
+                    <div className="mb-4">
+                        <PushSubscribe
+                            vapidKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY}
+                            hint={section === "chofer"
+                                ? "Activar avisos: entérate cuando te asignen la ruta del día"
+                                : "Activar avisos: entregas completadas y fallas en tiempo real"}
+                        />
+                    </div>
+                )}
+                {children}
+            </main>
         </div>
     );
 }
